@@ -5,27 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Éditeur Webtoon</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
 </head>
 <body>
     <div class="app">
         <!-- Sidebar Projet -->
         <aside id="project-sidebar" class="sidebar project">
-            <h3>Projet</h3>
-            <p id="block-count">0 blocs</p>
-            <button id="btn-export">⭳ Export</button>
-            <button id="btn-import">⭱ Import</button>
-            <input id="file-import" type="file" accept=".wtoon,.json" style="display: none;">
-            <button id="btn-reset">🔄 Reset</button>
+            <h3><i class="fas fa-folder-open"></i> Projet</h3>
+            <p id="block-count" class="stat-counter">0 blocs</p>
+            <div class="button-group">
+                <button id="btn-export"><i class="fas fa-download"></i> Export</button>
+                <button id="btn-import"><i class="fas fa-upload"></i> Import</button>
+                <input id="file-import" type="file" accept=".wtoon,.json" style="display: none;">
+                <button id="btn-reset" class="btn-warning"><i class="fas fa-trash-alt"></i> Reset</button>
+            </div>
             <hr>
-            <button id="btn-add-type">➕ Type</button>
+            <button id="btn-add-type" class="btn-primary"><i class="fas fa-plus-circle"></i> Nouveau Type</button>
         </aside>
 
         <!-- Main Content -->
         <main class="main">
             <header>
-                <button id="btn-toggle-project">📂</button>
-                <h2>Éditeur Webtoon</h2>
-                <button id="btn-toggle-tools">🛠️</button>
+                <button id="btn-toggle-project"><i class="fas fa-bars"></i></button>
+                <h2><i class="fas fa-edit"></i> Éditeur Webtoon</h2>
+                <button id="btn-toggle-tools"><i class="fas fa-tools"></i></button>
             </header>
 
             <!-- Liste des blocs -->
@@ -36,24 +40,26 @@
             <!-- Barre d'outils -->
             <footer id="block-types-buttons">
                 <!-- Block type buttons will be added here -->
-                <button id="btn-undo" disabled>↩️ Undo</button>
-                <button id="btn-docx">📄 DOCX</button>
-                <button id="btn-spellcheck">🔍 Ortho</button>
-                <button id="btn-theme">🌙</button>
+                <button id="btn-undo" disabled><i class="fas fa-undo"></i> Annuler</button>
+                <button id="btn-docx"><i class="fas fa-file-word"></i> DOCX</button>
+                <button id="btn-spellcheck"><i class="fas fa-spell-check"></i> Ortho</button>
+                <button id="btn-theme"><i class="fas fa-moon"></i></button>
             </footer>
         </main>
 
         <!-- Sidebar Outils -->
         <aside id="tools-sidebar" class="sidebar tools" style="display: none;">
-            <h3>Outils</h3>
-            <label>
-                🔑 Clé Gemini
-                <br>
-                <input type="password" id="gemini-key" style="width: 100%;">
+            <h3><i class="fas fa-sliders-h"></i> Outils</h3>
+            <label class="input-label">
+                <i class="fas fa-key"></i> Clé Gemini
+                <div class="input-wrapper">
+                    <input type="password" id="gemini-key">
+                    <span class="input-icon"><i class="fas fa-lock"></i></span>
+                </div>
             </label>
             <hr>
-            <h4>Rapport orthographe</h4>
-            <div id="spellcheck-result">
+            <h4><i class="fas fa-check-circle"></i> Rapport orthographe</h4>
+            <div id="spellcheck-result" class="report-container">
                 <p>Aucun rapport.</p>
             </div>
         </aside>
@@ -63,8 +69,8 @@
     <template id="block-template">
         <div class="block">
             <strong></strong>
-            <textarea rows="2" spellcheck="true"></textarea>
-            <button class="ai-btn">IA</button>
+            <textarea rows="2" spellcheck="true" placeholder="Entrez votre contenu ici..."></textarea>
+            <button class="ai-btn" title="Suggestions IA"><i class="fas fa-robot"></i></button>
             <div class="suggestions" style="display: none;">
                 <!-- AI suggestions will be added here -->
             </div>

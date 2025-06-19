@@ -1,14 +1,14 @@
 {
   "blocks": [
     {
-      "type": "C",
+      "type": "ADOLF",
       "number": 1,
-      "content": "Quoi de neuf ?"
+      "content": "Correct."
     },
     {
-      "type": "JBEDUSBCJ RSJ4",
-      "number": 1,
-      "content": "Enfin !"
+      "type": "ADOLF",
+      "number": 2,
+      "content": "J'observe."
     }
   ],
   "blockTypes": [
@@ -16,6 +16,6 @@
     "B",
     "DB",
     "C",
-    "JBEDUSBCJ RSJ4"
+    "ADOLF"
   ]
 }
