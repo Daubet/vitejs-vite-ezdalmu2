@@ -1,0 +1,133 @@
+:root {
+    --bg: #fff;
+    --text: #141414;
+    --sidebar: #fafafa;
+    --border: #ddd;
+    --btn-bg: #f0f0f0;
+}
+
+body.dark {
+    --bg: #1e1e1e;
+    --text: #e5e5e5;
+    --sidebar: #2b2b2b;
+    --border: #444;
+    --btn-bg: #3a3a3a;
+}
+
+body, html {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: sans-serif;
+}
+
+.app {
+    display: flex;
+    height: 100%;
+    overflow: hidden;
+}
+
+button {
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    padding: 4px 8px;
+    margin: 2px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+button:disabled {
+    opacity: .5;
+    cursor: default;
+}
+
+textarea, input, pre {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border);
+}
+
+textarea {
+    width: calc(100% - 40px); /* Adjust for IA button */
+    resize: vertical;
+}
+
+.sidebar {
+    background: var(--sidebar);
+    width: 250px;
+    height: 100%;
+    overflow: auto;
+    border-right: 1px solid var(--border);
+    padding: 10px;
+    flex-shrink: 0;
+}
+
+.sidebar.tools {
+    border-left: 1px solid var(--border);
+    border-right: none;
+}
+
+.main {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+}
+
+header, footer {
+    background: var(--sidebar);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    flex-shrink: 0;
+}
+
+footer {
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+    flex-wrap: wrap;
+}
+
+.scroll {
+    flex: 1;
+    overflow: auto;
+    padding: 10px;
+}
+
+.block {
+    margin-bottom: 12px;
+    position: relative;
+}
+
+.block .ai-btn {
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+
+.suggestions {
+    background: var(--sidebar);
+    border: 1px solid var(--border);
+    padding: 6px;
+    margin-top: 4px;
+}
+
+.sugg {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.sugg button {
+    margin-left: 6px;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 10px 0;
+} 

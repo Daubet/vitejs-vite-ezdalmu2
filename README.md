@@ -1,69 +1,44 @@
-# React + TypeScript + Vite
+# Éditeur Webtoon
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Une application web pour créer et gérer des scripts de webtoon, construite avec Flask, HTML, CSS et JavaScript.
 
-Currently, two official plugins are available:
+## Fonctionnalités
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Création et édition de blocs de script avec différents types (HB, B, DB, C)
+- Ajout de types personnalisés
+- Suggestions d'amélioration via l'API Gemini
+- Vérification orthographique via LanguageTool
+- Export en fichier DOCX
+- Sauvegarde/chargement de projets
+- Mode clair/sombre
+- Interface responsive
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+1. Clonez ce dépôt
+2. Installez les dépendances:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Lancez l'application:
+   ```
+   python app.py
+   ```
+4. Ouvrez votre navigateur à l'adresse `http://localhost:5000`
 
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Configuration
 
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
+Pour utiliser les fonctionnalités d'IA, vous devez obtenir une clé API pour Gemini et la configurer dans l'interface utilisateur (section Outils).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Structure du projet
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+- `app.py` - Application Flask principale
+- `templates/` - Contient les modèles HTML
+- `static/` - Ressources statiques (CSS, JS)
+  - `css/style.css` - Styles de l'application
+  - `js/script.js` - Code JavaScript pour l'interface utilisateur
+- `data/` - Dossier de stockage des données projet
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Développement
 
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+Cette application est la version Python/Flask d'une application initialement développée en React.

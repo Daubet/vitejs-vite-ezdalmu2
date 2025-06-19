@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Éditeur Webtoon</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="app">
+        <!-- Sidebar Projet -->
+        <aside id="project-sidebar" class="sidebar project">
+            <h3>Projet</h3>
+            <p id="block-count">0 blocs</p>
+            <button id="btn-export">⭳ Export</button>
+            <button id="btn-import">⭱ Import</button>
+            <input id="file-import" type="file" accept=".wtoon,.json" style="display: none;">
+            <button id="btn-reset">🔄 Reset</button>
+            <hr>
+            <button id="btn-add-type">➕ Type</button>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main">
+            <header>
+                <button id="btn-toggle-project">📂</button>
+                <h2>Éditeur Webtoon</h2>
+                <button id="btn-toggle-tools">🛠️</button>
+            </header>
+
+            <!-- Liste des blocs -->
+            <div class="scroll" id="blocks-container">
+                <!-- Blocks will be rendered here -->
+            </div>
+
+            <!-- Barre d'outils -->
+            <footer id="block-types-buttons">
+                <!-- Block type buttons will be added here -->
+                <button id="btn-undo" disabled>↩️ Undo</button>
+                <button id="btn-docx">📄 DOCX</button>
+                <button id="btn-spellcheck">🔍 Ortho</button>
+                <button id="btn-theme">🌙</button>
+            </footer>
+        </main>
+
+        <!-- Sidebar Outils -->
+        <aside id="tools-sidebar" class="sidebar tools" style="display: none;">
+            <h3>Outils</h3>
+            <label>
+                🔑 Clé Gemini
+                <br>
+                <input type="password" id="gemini-key" style="width: 100%;">
+            </label>
+            <hr>
+            <h4>Rapport orthographe</h4>
+            <div id="spellcheck-result">
+                <p>Aucun rapport.</p>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Block Template (hidden) -->
+    <template id="block-template">
+        <div class="block">
+            <strong></strong>
+            <textarea rows="2" spellcheck="true"></textarea>
+            <button class="ai-btn">IA</button>
+            <div class="suggestions" style="display: none;">
+                <!-- AI suggestions will be added here -->
+            </div>
+        </div>
+    </template>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html> 

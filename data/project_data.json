@@ -1,0 +1,21 @@
+{
+  "blocks": [
+    {
+      "type": "C",
+      "number": 1,
+      "content": "Quoi de neuf ?"
+    },
+    {
+      "type": "JBEDUSBCJ RSJ4",
+      "number": 1,
+      "content": "Enfin !"
+    }
+  ],
+  "blockTypes": [
+    "HB",
+    "B",
+    "DB",
+    "C",
+    "JBEDUSBCJ RSJ4"
+  ]
+}
