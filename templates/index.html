@@ -70,7 +70,13 @@
         <div class="block">
             <strong></strong>
             <textarea rows="2" spellcheck="true" placeholder="Entrez votre contenu ici..."></textarea>
-            <button class="ai-btn" title="Suggestions IA"><i class="fas fa-robot"></i></button>
+            <div class="block-actions">
+                <button class="ai-btn" title="Suggestions IA"><i class="fas fa-robot"></i></button>
+                <button class="comment-btn" title="Ajouter un commentaire"><i class="fas fa-comment"></i></button>
+            </div>
+            <div class="comment-container" style="display: none;">
+                <textarea class="comment-textarea" rows="1" placeholder="Commentaire (non inclus dans l'export Word)..."></textarea>
+            </div>
             <div class="suggestions" style="display: none;">
                 <!-- AI suggestions will be added here -->
             </div>

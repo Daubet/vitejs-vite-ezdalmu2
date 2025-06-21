@@ -5,6 +5,8 @@ let history = [];
 let aiMap = {};
 let theme = localStorage.getItem('wtoon-theme') || 'light';
 let geminiKey = localStorage.getItem('geminiKey') || '';
+let themeClickCount = 0;
+let themeClickTimer = null;
 
 // DOM references
 const blocksContainer = document.getElementById('blocks-container');
@@ -207,10 +209,20 @@ function renderBlocks() {
         const strongEl = blockEl.querySelector('strong');
         const textareaEl = blockEl.querySelector('textarea');
         const aiBtn = blockEl.querySelector('.ai-btn');
+        const commentBtn = blockEl.querySelector('.comment-btn');
+        const commentContainer = blockEl.querySelector('.comment-container');
+        const commentTextarea = blockEl.querySelector('.comment-textarea');
         const suggestionsEl = blockEl.querySelector('.suggestions');
         
         strongEl.textContent = block.type + block.number;
         textareaEl.value = block.content;
+        
+        // Set comment if exists
+        if (block.comment) {
+            commentTextarea.value = block.comment;
+            commentContainer.style.display = 'block';
+            commentBtn.classList.add('active');
+        }
         
         // Add animation delay
         blockEl.style.animationDelay = `${index * 0.05}s`;
@@ -219,11 +231,31 @@ function renderBlocks() {
         textareaEl.setAttribute('data-min-rows', '2');
         autoResizeTextarea(textareaEl);
         
+        // Auto resize comment textarea
+        commentTextarea.setAttribute('data-min-rows', '1');
+        autoResizeTextarea(commentTextarea);
+        
         // Update block content
         textareaEl.addEventListener('input', (e) => {
             block.content = e.target.value;
             autoResizeTextarea(e.target);
             saveData();
+        });
+        
+        // Update comment content
+        commentTextarea.addEventListener('input', (e) => {
+            block.comment = e.target.value;
+            autoResizeTextarea(e.target);
+            saveData();
+        });
+        
+        // Toggle comment visibility
+        commentBtn.addEventListener('click', () => {
+            commentContainer.style.display = commentContainer.style.display === 'none' ? 'block' : 'none';
+            commentBtn.classList.toggle('active');
+            if (commentContainer.style.display === 'block') {
+                commentTextarea.focus();
+            }
         });
         
         // AI button
@@ -290,7 +322,7 @@ function renderSuggestions(container, suggestions, blockIndex) {
 function addBlock(type) {
     pushHistory();
     const nextNumber = Math.max(0, ...blocks.filter(b => b.type === type).map(b => b.number)) + 1;
-    blocks.push({ type, number: nextNumber, content: '' });
+    blocks.push({ type, number: nextNumber, content: '', comment: '' });
     saveData();
     renderBlocks();
     updateBlockCount();
@@ -532,6 +564,16 @@ function acceptSuggestion(blockIndex, suggestion) {
     block.content = suggestion;
     saveData();
     renderBlocks();
+    
+    // Hide suggestions container
+    const blockEl = blocksContainer.children[blockIndex];
+    if (blockEl) {
+        const suggestionsEl = blockEl.querySelector('.suggestions');
+        if (suggestionsEl) {
+            suggestionsEl.style.display = 'none';
+        }
+    }
+    
     document.getElementById('btn-undo').disabled = false;
     showToast('Suggestion appliquée', 'success');
 }
@@ -558,17 +600,56 @@ function toggleToolsSidebar(show) {
 
 // Toggle theme
 function toggleTheme() {
-    theme = theme === 'light' ? 'dark' : 'light';
+    // Reset timer and increment click count
+    clearTimeout(themeClickTimer);
+    themeClickCount++;
+    
+    // Set timer to reset click count after 1 second
+    themeClickTimer = setTimeout(() => {
+        themeClickCount = 0;
+    }, 1000);
+    
+    // Cycle through themes based on click count
+    if (themeClickCount >= 3) {
+        // Third+ click within 1 second - obsidian theme
+        theme = 'obsidian';
+        themeClickCount = 0; // Reset after reaching obsidian
+    } else if (theme === 'light') {
+        // Light to dark
+        theme = 'dark';
+    } else if (theme === 'dark' && themeClickCount < 3) {
+        // Dark to light (unless rapid clicking for obsidian)
+        theme = 'light';
+    } else if (theme === 'obsidian') {
+        // Obsidian to light
+        theme = 'light';
+    }
+    
+    // Save and apply theme
     localStorage.setItem('wtoon-theme', theme);
     setTheme(theme);
-    showToast(`Thème ${theme === 'light' ? 'clair' : 'sombre'} activé`, 'info');
+    
+    // Show toast with theme name
+    let themeName = theme === 'light' ? 'clair' : (theme === 'dark' ? 'sombre' : 'obsidienne');
+    showToast(`Thème ${themeName} activé`, 'info');
 }
 
 // Set theme
 function setTheme(newTheme) {
-    document.body.className = newTheme;
+    // Remove all theme classes first
+    document.body.classList.remove('light', 'dark', 'obsidian');
+    // Add the current theme class
+    document.body.classList.add(newTheme);
+    
+    // Update theme button icon
     const themeBtn = document.getElementById('btn-theme');
-    themeBtn.innerHTML = theme === 'light' ? '<i class="fas fa-moon"></i>' : '<i class="fas fa-sun"></i>';
+    if (newTheme === 'light') {
+        themeBtn.innerHTML = '<i class="fas fa-moon"></i>';
+    } else if (newTheme === 'dark') {
+        themeBtn.innerHTML = '<i class="fas fa-sun"></i>';
+    } else if (newTheme === 'obsidian') {
+        themeBtn.innerHTML = '<i class="fas fa-star"></i>';
+    }
 }
 
 // Update Gemini key

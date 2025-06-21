@@ -1,14 +1,34 @@
 {
   "blocks": [
     {
-      "type": "ADOLF",
+      "comment": "",
+      "content": "C'est juste.",
       "number": 1,
-      "content": "Correct."
+      "type": "ADOLF"
     },
     {
-      "type": "ADOLF",
+      "comment": "",
+      "content": "Je n'ai pas tort.",
       "number": 2,
-      "content": "J'observe."
+      "type": "ADOLF"
+    },
+    {
+      "comment": "ca dit quoi",
+      "content": "",
+      "number": 1,
+      "type": "DB"
+    },
+    {
+      "comment": "",
+      "content": "",
+      "number": 2,
+      "type": "DB"
+    },
+    {
+      "comment": "",
+      "content": "",
+      "number": 1,
+      "type": "C"
     }
   ],
   "blockTypes": [

@@ -32,6 +32,22 @@ body.dark {
     --success: #2f855a;
 }
 
+body.obsidian {
+    --primary: #9580ff;
+    --primary-light: #2a2040;
+    --secondary: #14a76c;
+    --text: #d4d4d4;
+    --text-light: #8a8a8a;
+    --bg: #0f0f0f;
+    --sidebar: #1a1a1a;
+    --border: #2a2a2a;
+    --btn-bg: #1a1a1a;
+    --shadow: 0 4px 6px rgba(0, 0, 0, 0.5);
+    --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.6);
+    --warning: #e53e3e;
+    --success: #2f855a;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 body, html {
@@ -402,72 +418,107 @@ footer {
 
 /* Blocks */
 .block {
-    margin-bottom: 24px;
+    background-color: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 15px;
+    margin-bottom: 15px;
+    box-shadow: var(--shadow);
+    animation: fade-in 0.3s ease forwards;
+    opacity: 0;
     position: relative;
-    transition: var(--transition);
-    animation: fade-in 0.3s ease;
 }
 
 @keyframes fade-in {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
+    to { opacity: 1; }
 }
 
 .block strong {
     display: inline-block;
     background-color: var(--primary);
     color: white;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: var(--radius);
-    font-weight: 600;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
+    font-size: 0.9rem;
+    letter-spacing: 0.5px;
 }
 
 .block textarea {
-    box-shadow: var(--shadow);
-    width: 100%;
-    border-radius: var(--radius);
-    padding: 14px;
-    font-size: 1rem;
+    width: calc(100% - 20px);
+    margin-bottom: 10px;
 }
 
-.block textarea:focus {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+.block-actions {
+    display: flex;
+    gap: 5px;
 }
 
 .block .ai-btn {
-    position: absolute;
-    right: 0;
-    top: 0;
-    background: var(--secondary);
+    background-color: var(--secondary);
     color: white;
     border: none;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    width: 32px;
-    height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
     padding: 0;
-    line-height: 1;
-    box-shadow: var(--shadow);
+    font-size: 1rem;
 }
 
 .block .ai-btn:hover {
-    transform: rotate(15deg);
-    box-shadow: var(--shadow-md);
+    transform: scale(1.1);
+    filter: brightness(1.1);
 }
 
-/* Suggestions */
-.suggestions {
-    background: var(--sidebar);
-    border: 1px solid var(--border);
-    padding: 10px 15px;
+.block .comment-btn {
+    background-color: var(--text-light);
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    padding: 0;
+    font-size: 1rem;
+}
+
+.block .comment-btn:hover {
+    transform: scale(1.1);
+    filter: brightness(1.1);
+}
+
+.block .comment-btn.active {
+    background-color: var(--primary);
+}
+
+.comment-container {
     margin-top: 10px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    animation: slide-down 0.3s ease;
+    border-left: 3px solid var(--text-light);
+    padding-left: 10px;
+}
+
+.comment-textarea {
+    background-color: var(--primary-light);
+    border: 1px solid var(--border);
+    width: 100%;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.suggestions {
+    margin-top: 10px;
+    border-left: 3px solid var(--secondary);
+    padding-left: 10px;
+    animation: slide-down 0.3s ease forwards;
 }
 
 @keyframes slide-down {
@@ -476,56 +527,59 @@ footer {
 }
 
 .sugg {
+    background-color: var(--primary-light);
+    border-radius: var(--radius);
+    padding: 8px 12px;
+    margin-bottom: 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 10px;
-    padding: 8px;
-    border-radius: var(--radius);
-    background: var(--bg);
-    border: 1px solid var(--border);
-    transition: var(--transition);
+    animation: fade-in 0.3s ease forwards;
+    opacity: 0;
 }
 
 .sugg:hover {
-    border-color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary-light);
+    background-color: var(--primary-light);
+    filter: brightness(0.95);
 }
 
 .sugg span {
     flex: 1;
-    padding-right: 10px;
+    margin-right: 10px;
 }
 
 .sugg button {
-    background: var(--secondary);
+    background-color: var(--secondary);
     color: white;
     border: none;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
     padding: 0;
+    font-size: 0.8rem;
 }
 
 .sugg button:hover {
-    background: var(--secondary);
     transform: scale(1.1);
+    filter: brightness(1.1);
 }
 
 .ai-loading {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     padding: 10px;
     color: var(--text-light);
     font-style: italic;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .ai-loading i {
-    color: var(--primary);
+    color: var(--secondary);
 }
 
 .error {

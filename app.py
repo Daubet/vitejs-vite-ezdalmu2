@@ -6,9 +6,11 @@ import docx
 from docx.shared import RGBColor
 import io
 import tempfile
+import logging
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'webtoon-editor-secret-key'
+logging.basicConfig(level=logging.INFO)
 
 # Ensure the data directory exists
 if not os.path.exists('data'):
@@ -30,7 +32,8 @@ def load_data():
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except:
+        except Exception as e:
+            logging.error(f"Error loading data: {str(e)}")
             return get_default_data()
     return get_default_data()
 
@@ -50,12 +53,17 @@ def api_load():
 @app.route('/api/save', methods=['POST'])
 def api_save():
     data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
     save_data(data)
     return jsonify({"status": "success"})
 
 @app.route('/api/spellcheck', methods=['POST'])
 def api_spellcheck():
     data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
     blocks = data.get('blocks', [])
     
     if not blocks:
@@ -86,11 +94,15 @@ def api_spellcheck():
         else:
             return jsonify({"error": "API Error", "details": response.text})
     except Exception as e:
+        logging.error(f"Spellcheck error: {str(e)}")
         return jsonify({"error": "Network Error", "details": str(e)})
 
 @app.route('/api/gemini', methods=['POST'])
 def api_gemini():
     data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
     api_key = data.get('api_key', '')
     content = data.get('content', '')
     
@@ -129,11 +141,15 @@ Fournis 3 variantes concises, **sans parenthèses ni explication**, une par lign
         
         return jsonify({"suggestions": suggestions[:3]})
     except Exception as e:
+        logging.error(f"Gemini API error: {str(e)}")
         return jsonify({"error": str(e)})
 
 @app.route('/api/export-docx', methods=['POST'])
 def export_docx():
     data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
     blocks = data.get('blocks', [])
     
     if not blocks:
