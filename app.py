@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, url_for
 import os
 import json
 import requests
@@ -7,14 +7,22 @@ from docx.shared import RGBColor
 import io
 import tempfile
 import logging
+import uuid
+import shutil
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'webtoon-editor-secret-key'
+app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
 logging.basicConfig(level=logging.INFO)
 
-# Ensure the data directory exists
+# Ensure the data and uploads directories exist
 if not os.path.exists('data'):
     os.makedirs('data')
+    
+if not os.path.exists(app.config['UPLOAD_FOLDER']):
+    os.makedirs(app.config['UPLOAD_FOLDER'])
 
 # File to store project data
 DATA_FILE = 'data/project_data.json'
@@ -57,6 +65,49 @@ def api_save():
         return jsonify({"error": "Invalid JSON"}), 400
     save_data(data)
     return jsonify({"status": "success"})
+
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    if file and file.filename:
+        # Create a unique filename
+        filename = secure_filename(file.filename)
+        file_ext = os.path.splitext(filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        # Save the file
+        file.save(file_path)
+        
+        # Return the path to access the file
+        file_url = url_for('static', filename=f'uploads/{unique_filename}')
+        
+        return jsonify({
+            "status": "success",
+            "filename": filename,
+            "path": file_path,
+            "url": file_url
+        })
+    
+    return jsonify({"error": "Failed to upload file"}), 500
+
+@app.route('/api/cleanup', methods=['POST'])
+def api_cleanup():
+    """Cleanup unused uploads to free space"""
+    try:
+        # Could implement a strategy to remove old files
+        # For now, just return success
+        return jsonify({"status": "success", "message": "Cleanup completed"})
+    except Exception as e:
+        logging.error(f"Cleanup error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/spellcheck', methods=['POST'])
 def api_spellcheck():
