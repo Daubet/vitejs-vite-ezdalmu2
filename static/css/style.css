@@ -14,6 +14,7 @@
     --transition: all 0.3s ease;
     --warning: #f56565;
     --success: #38a169;
+    --viewer-width: 40%; /* Default viewer width */
 }
 
 body.dark {
@@ -741,4 +742,182 @@ hr {
         left: 15px;
         max-width: none;
     }
+}
+
+/* Content wrapper for resizable panels */
+.content-wrapper {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Viewer panel styles */
+.viewer-panel {
+    width: var(--viewer-width);
+    height: 100%;
+    background: var(--sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: width 0.2s ease;
+}
+
+.viewer-header {
+    display: flex;
+    padding: 10px;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+}
+
+.viewer-filename {
+    flex: 1;
+    margin-left: 10px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viewer-content {
+    flex: 1;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    background-color: #f0f0f0;
+}
+
+.viewer-content::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.viewer-content::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+.viewer-content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.viewer-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    gap: 10px;
+}
+
+.btn-icon {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    padding: 5px;
+    border-radius: var(--radius);
+}
+
+.btn-icon:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+}
+
+.btn-icon:disabled {
+    opacity: 0.5;
+    cursor: default;
+    background: transparent;
+    color: var(--text-light);
+}
+
+#pdf-container {
+    max-width: 100%;
+    min-height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#pdf-container canvas {
+    max-width: 100%;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+#image-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    width: 100%;
+}
+
+#image-viewer {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+/* Resizer handle */
+.resizer {
+    width: 6px;
+    background: var(--border);
+    cursor: col-resize;
+    z-index: 10;
+    transition: background 0.2s ease;
+}
+
+.resizer:hover, .resizer.active {
+    background: var(--primary);
+}
+
+/* File manager in sidebar */
+.file-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+/* Adjust main content */
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--bg);
+    position: relative;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .content-wrapper {
+        flex-direction: column;
+    }
+    
+    .viewer-panel {
+        width: 100%;
+        height: 40%;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .resizer {
+        width: 100%;
+        height: 6px;
+        cursor: row-resize;
+    }
+}
+
+/* Hide viewer by default */
+.viewer-panel.hidden {
+    width: 0;
+}
+
+/* When viewer is hidden */
+.main.full-width {
+    flex: 1;
 } 

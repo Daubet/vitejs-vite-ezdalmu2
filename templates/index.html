@@ -31,30 +31,65 @@
                     </div>
                 </div>
             </div>
+            <hr>
+            <h4><i class="fas fa-file-upload"></i> Fichier Webtoon</h4>
+            <div class="file-manager">
+                <button id="btn-upload-image" class="btn-primary"><i class="fas fa-image"></i> Importer Image</button>
+                <button id="btn-upload-pdf" class="btn-primary"><i class="fas fa-file-pdf"></i> Importer PDF</button>
+                <input id="file-upload-image" type="file" accept="image/*" style="display: none;">
+                <input id="file-upload-pdf" type="file" accept=".pdf" style="display: none;">
+            </div>
         </aside>
 
-        <!-- Main Content -->
-        <main class="main">
-            <header>
-                <button id="btn-toggle-project"><i class="fas fa-bars"></i></button>
-                <h2><i class="fas fa-edit"></i> Éditeur Webtoon</h2>
-                <button id="btn-toggle-tools"><i class="fas fa-tools"></i></button>
-            </header>
-
-            <!-- Liste des blocs -->
-            <div class="scroll" id="blocks-container">
-                <!-- Blocks will be rendered here -->
+        <!-- Main Content with Resizable Panels -->
+        <div class="content-wrapper">
+            <!-- Viewer Panel (for PDF/Images) -->
+            <div id="viewer-panel" class="viewer-panel">
+                <div class="viewer-header">
+                    <button id="btn-close-viewer" class="btn-icon"><i class="fas fa-times"></i></button>
+                    <span id="viewer-filename">Aucun fichier</span>
+                </div>
+                <div class="viewer-content">
+                    <div id="pdf-container"></div>
+                    <div id="image-container">
+                        <img id="image-viewer" style="display: none;">
+                    </div>
+                </div>
+                <div class="viewer-controls">
+                    <button id="btn-prev-page" class="btn-icon" disabled><i class="fas fa-chevron-left"></i></button>
+                    <span id="page-info">Page: 0/0</span>
+                    <button id="btn-next-page" class="btn-icon" disabled><i class="fas fa-chevron-right"></i></button>
+                    <button id="btn-zoom-in" class="btn-icon"><i class="fas fa-search-plus"></i></button>
+                    <button id="btn-zoom-out" class="btn-icon"><i class="fas fa-search-minus"></i></button>
+                </div>
             </div>
+            
+            <!-- Resizer Handle -->
+            <div id="resizer" class="resizer"></div>
 
-            <!-- Barre d'outils -->
-            <footer id="block-types-buttons">
-                <!-- Block type buttons will be added here -->
-                <button id="btn-undo" disabled><i class="fas fa-undo"></i> Annuler</button>
-                <button id="btn-docx"><i class="fas fa-file-word"></i> DOCX</button>
-                <button id="btn-spellcheck"><i class="fas fa-spell-check"></i> Ortho</button>
-                <button id="btn-theme"><i class="fas fa-moon"></i></button>
-            </footer>
-        </main>
+            <!-- Main Content -->
+            <main class="main">
+                <header>
+                    <button id="btn-toggle-project"><i class="fas fa-bars"></i></button>
+                    <h2><i class="fas fa-edit"></i> Éditeur Webtoon</h2>
+                    <button id="btn-toggle-tools"><i class="fas fa-tools"></i></button>
+                </header>
+
+                <!-- Liste des blocs -->
+                <div class="scroll" id="blocks-container">
+                    <!-- Blocks will be rendered here -->
+                </div>
+
+                <!-- Barre d'outils -->
+                <footer id="block-types-buttons">
+                    <!-- Block type buttons will be added here -->
+                    <button id="btn-undo" disabled><i class="fas fa-undo"></i> Annuler</button>
+                    <button id="btn-docx"><i class="fas fa-file-word"></i> DOCX</button>
+                    <button id="btn-spellcheck"><i class="fas fa-spell-check"></i> Ortho</button>
+                    <button id="btn-theme"><i class="fas fa-moon"></i></button>
+                </footer>
+            </main>
+        </div>
 
         <!-- Sidebar Outils -->
         <aside id="tools-sidebar" class="sidebar tools" data-visible="false">
@@ -93,6 +128,7 @@
         </div>
     </template>
 
+    <script src="{{ url_for('static', filename='js/lib/pdf.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

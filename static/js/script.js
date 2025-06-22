@@ -8,6 +8,11 @@ let theme = localStorage.getItem('wtoon-theme') || 'light';
 let geminiKey = localStorage.getItem('geminiKey') || '';
 let themeClickCount = 0;
 let themeClickTimer = null;
+let currentPDF = null;
+let currentPDFDoc = null;
+let currentPage = 1;
+let totalPages = 0;
+let currentZoom = 1.0;
 
 // DOM references
 const blocksContainer = document.getElementById('blocks-container');
@@ -19,6 +24,21 @@ const fileImport = document.getElementById('file-import');
 const geminiKeyInput = document.getElementById('gemini-key');
 const blockTemplate = document.getElementById('block-template');
 const spellcheckResult = document.getElementById('spellcheck-result');
+const viewerPanel = document.getElementById('viewer-panel');
+const resizer = document.getElementById('resizer');
+const mainContent = document.querySelector('.main');
+const pdfContainer = document.getElementById('pdf-container');
+const imageContainer = document.getElementById('image-container');
+const imageViewer = document.getElementById('image-viewer');
+const viewerFilename = document.getElementById('viewer-filename');
+const btnPrevPage = document.getElementById('btn-prev-page');
+const btnNextPage = document.getElementById('btn-next-page');
+const btnZoomIn = document.getElementById('btn-zoom-in');
+const btnZoomOut = document.getElementById('btn-zoom-out');
+const btnCloseViewer = document.getElementById('btn-close-viewer');
+const pageInfo = document.getElementById('page-info');
+const fileUploadImage = document.getElementById('file-upload-image');
+const fileUploadPDF = document.getElementById('file-upload-pdf');
 
 // Initialize app
 function init() {
@@ -30,6 +50,10 @@ function init() {
     
     // Ensure tools sidebar is hidden by default
     toolsSidebar.setAttribute('data-visible', 'false');
+    
+    // Hide viewer panel by default
+    viewerPanel.classList.add('hidden');
+    mainContent.classList.add('full-width');
     
     // Render block type buttons immediately with default types
     renderBlockTypeButtons();
@@ -44,6 +68,9 @@ function init() {
     setTimeout(() => {
         document.body.classList.add('loaded');
     }, 100);
+
+    // Initialize PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/lib/pdf.worker.min.js';
 }
 
 // Setup event listeners
@@ -88,6 +115,22 @@ function setupEventListeners() {
     
     // Add shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
+
+    // Setup resizable panel
+    setupResizablePanel();
+    
+    // Viewer controls
+    btnPrevPage.addEventListener('click', prevPage);
+    btnNextPage.addEventListener('click', nextPage);
+    btnZoomIn.addEventListener('click', zoomIn);
+    btnZoomOut.addEventListener('click', zoomOut);
+    btnCloseViewer.addEventListener('click', closeViewer);
+    
+    // File upload handlers
+    document.getElementById('btn-upload-image').addEventListener('click', () => fileUploadImage.click());
+    document.getElementById('btn-upload-pdf').addEventListener('click', () => fileUploadPDF.click());
+    fileUploadImage.addEventListener('change', handleImageUpload);
+    fileUploadPDF.addEventListener('change', handlePDFUpload);
 }
 
 // Handle keyboard shortcuts
@@ -132,6 +175,245 @@ function showToast(message, type = 'info') {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// Setup resizable panel
+function setupResizablePanel() {
+    let isResizing = false;
+    let lastX, lastY;
+
+    resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        resizer.classList.add('active');
+        document.addEventListener('mousemove', handleMouseMove);
+        document.addEventListener('mouseup', stopResize);
+        e.preventDefault();
+    });
+
+    function handleMouseMove(e) {
+        if (!isResizing) return;
+
+        // Get the container dimensions
+        const containerWidth = document.querySelector('.content-wrapper').offsetWidth;
+
+        // Calculate the new width based on mouse position
+        let newWidth;
+
+        if (window.innerWidth <= 768) { // Mobile view (vertical resizing)
+            const deltaY = e.clientY - lastY;
+            const containerHeight = document.querySelector('.content-wrapper').offsetHeight;
+            const currentHeight = viewerPanel.offsetHeight;
+            newWidth = ((currentHeight + deltaY) / containerHeight) * 100;
+            lastY = e.clientY;
+            
+            // Limit height between 20% and 80%
+            newWidth = Math.max(20, Math.min(80, newWidth));
+            
+            // Update CSS variable for height
+            viewerPanel.style.height = `${newWidth}%`;
+        } else { // Desktop view (horizontal resizing)
+            const deltaX = e.clientX - lastX;
+            const currentWidth = viewerPanel.offsetWidth;
+            newWidth = ((currentWidth + deltaX) / containerWidth) * 100;
+            lastX = e.clientX;
+            
+            // Limit width between 20% and 80%
+            newWidth = Math.max(20, Math.min(80, newWidth));
+            
+            // Update CSS variable for width
+            document.documentElement.style.setProperty('--viewer-width', `${newWidth}%`);
+        }
+    }
+
+    function stopResize() {
+        isResizing = false;
+        resizer.classList.remove('active');
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', stopResize);
+    }
+}
+
+// Handle PDF upload
+function handlePDFUpload(e) {
+    const file = e.target.files[0];
+    if (!file || file.type !== 'application/pdf') return;
+    
+    // Show the viewer
+    openViewer();
+
+    // Clear any previous content
+    pdfContainer.innerHTML = '';
+    imageViewer.style.display = 'none';
+    
+    // Set file name in the viewer
+    viewerFilename.textContent = file.name;
+    
+    // Read the file
+    const fileReader = new FileReader();
+    fileReader.onload = function(event) {
+        const typedArray = new Uint8Array(event.target.result);
+        loadPdfFromData(typedArray);
+    };
+    fileReader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    e.target.value = null;
+}
+
+// Handle image upload
+function handleImageUpload(e) {
+    const file = e.target.files[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    
+    // Show the viewer
+    openViewer();
+
+    // Clear any previous content
+    pdfContainer.innerHTML = '';
+    
+    // Set file name in the viewer
+    viewerFilename.textContent = file.name;
+    
+    // Disable PDF navigation
+    btnPrevPage.disabled = true;
+    btnNextPage.disabled = true;
+    pageInfo.textContent = '';
+    
+    // Display the image
+    const fileReader = new FileReader();
+    fileReader.onload = function(event) {
+        imageViewer.src = event.target.result;
+        imageViewer.style.display = 'block';
+        currentZoom = 1.0;
+        imageViewer.style.transform = `scale(${currentZoom})`;
+    };
+    fileReader.readAsDataURL(file);
+    
+    // Reset file input
+    e.target.value = null;
+}
+
+// Load PDF from data
+async function loadPdfFromData(data) {
+    try {
+        // Load the PDF
+        currentPDFDoc = await pdfjsLib.getDocument({ data: data }).promise;
+        totalPages = currentPDFDoc.numPages;
+        currentPage = 1;
+        
+        // Enable/disable navigation based on page count
+        btnNextPage.disabled = totalPages <= 1;
+        btnPrevPage.disabled = true;
+        
+        // Update page info
+        pageInfo.textContent = `Page: ${currentPage}/${totalPages}`;
+        
+        // Render the first page
+        renderPDFPage(currentPage);
+    } catch (error) {
+        console.error('Error loading PDF:', error);
+        showToast('Erreur lors du chargement du PDF', 'error');
+    }
+}
+
+// Render PDF page
+async function renderPDFPage(pageNumber) {
+    if (!currentPDFDoc) return;
+    
+    try {
+        // Get the page
+        const page = await currentPDFDoc.getPage(pageNumber);
+        
+        // Clear previous content
+        pdfContainer.innerHTML = '';
+        
+        // Create a canvas for rendering
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        pdfContainer.appendChild(canvas);
+        
+        // Calculate scale to fit the width
+        const viewport = page.getViewport({ scale: currentZoom });
+        
+        // Set canvas dimensions
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        
+        // Render the page
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+        
+        // Update page info
+        pageInfo.textContent = `Page: ${pageNumber}/${totalPages}`;
+        
+        // Update navigation buttons
+        btnPrevPage.disabled = pageNumber <= 1;
+        btnNextPage.disabled = pageNumber >= totalPages;
+    } catch (error) {
+        console.error('Error rendering PDF page:', error);
+        showToast('Erreur lors du rendu de la page PDF', 'error');
+    }
+}
+
+// Next page
+function nextPage() {
+    if (currentPage < totalPages) {
+        currentPage++;
+        renderPDFPage(currentPage);
+    }
+}
+
+// Previous page
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        renderPDFPage(currentPage);
+    }
+}
+
+// Zoom in
+function zoomIn() {
+    currentZoom += 0.2;
+    if (currentZoom > 3) currentZoom = 3;
+    
+    if (currentPDFDoc) {
+        renderPDFPage(currentPage);
+    } else if (imageViewer.style.display !== 'none') {
+        imageViewer.style.transform = `scale(${currentZoom})`;
+    }
+}
+
+// Zoom out
+function zoomOut() {
+    currentZoom -= 0.2;
+    if (currentZoom < 0.5) currentZoom = 0.5;
+    
+    if (currentPDFDoc) {
+        renderPDFPage(currentPage);
+    } else if (imageViewer.style.display !== 'none') {
+        imageViewer.style.transform = `scale(${currentZoom})`;
+    }
+}
+
+// Open viewer
+function openViewer() {
+    viewerPanel.classList.remove('hidden');
+    mainContent.classList.remove('full-width');
+    currentPDFDoc = null;
+    currentPage = 1;
+    totalPages = 0;
+    currentZoom = 1.0;
+}
+
+// Close viewer
+function closeViewer() {
+    viewerPanel.classList.add('hidden');
+    mainContent.classList.add('full-width');
+    currentPDFDoc = null;
 }
 
 // Load data from API
