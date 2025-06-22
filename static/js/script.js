@@ -23,9 +23,20 @@ const spellcheckResult = document.getElementById('spellcheck-result');
 function init() {
     setTheme(theme);
     geminiKeyInput.value = geminiKey;
-    loadData();
-    setupEventListeners();
+    
+    // Ensure project sidebar is hidden by default
+    projectSidebar.setAttribute('data-visible', 'false');
+    
+    // Ensure tools sidebar is hidden by default
+    toolsSidebar.setAttribute('data-visible', 'false');
+    
+    // Render block type buttons immediately with default types
     renderBlockTypeButtons();
+    
+    setupEventListeners();
+    
+    // Load data after UI is set up
+    loadData();
     
     // Animate entry
     setTimeout(() => {
@@ -40,8 +51,28 @@ function setupEventListeners() {
     document.getElementById('btn-import').addEventListener('click', () => fileImport.click());
     document.getElementById('btn-reset').addEventListener('click', resetAll);
     document.getElementById('btn-add-type').addEventListener('click', addType);
-    document.getElementById('btn-toggle-project').addEventListener('click', toggleProjectSidebar);
-    document.getElementById('btn-toggle-tools').addEventListener('click', toggleToolsSidebar);
+    
+    // Toggle sidebar buttons - with direct implementation to ensure they work
+    const btnToggleProject = document.getElementById('btn-toggle-project');
+    btnToggleProject.addEventListener('click', function(e) {
+        e.preventDefault(); // Empêcher tout comportement par défaut
+        const isVisible = projectSidebar.getAttribute('data-visible') === 'true';
+        const newState = !isVisible ? 'true' : 'false';
+        console.log('Toggle project sidebar:', isVisible, '->', newState);
+        projectSidebar.setAttribute('data-visible', newState);
+        showToast(isVisible ? 'Menu projet fermé' : 'Menu projet ouvert');
+    });
+    
+    const btnToggleTools = document.getElementById('btn-toggle-tools');
+    btnToggleTools.addEventListener('click', function(e) {
+        e.preventDefault(); // Empêcher tout comportement par défaut
+        const isVisible = toolsSidebar.getAttribute('data-visible') === 'true';
+        const newState = !isVisible ? 'true' : 'false';
+        console.log('Toggle tools sidebar:', isVisible, '->', newState);
+        toolsSidebar.setAttribute('data-visible', newState);
+        showToast(isVisible ? 'Menu outils fermé' : 'Menu outils ouvert');
+    });
+    
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-docx').addEventListener('click', exportDocx);
     document.getElementById('btn-spellcheck').addEventListener('click', spellCheck);
@@ -112,6 +143,7 @@ async function loadData() {
         history = [];
         aiMap = {};
         renderBlocks();
+        renderBlockTypeButtons();
         updateBlockCount();
         showLoading(false);
     } catch (error) {
@@ -158,6 +190,9 @@ async function saveData() {
 
 // Render block type buttons
 function renderBlockTypeButtons() {
+    // Use default types if none are loaded yet
+    const typesToRender = blockTypes.length > 0 ? blockTypes : ['HB', 'B', 'DB', 'C'];
+    
     // Clear existing type buttons
     const undoBtn = document.getElementById('btn-undo');
     const undoBtnParent = undoBtn.parentNode;
@@ -168,7 +203,7 @@ function renderBlockTypeButtons() {
     }
     
     // Add block type buttons
-    blockTypes.forEach(type => {
+    typesToRender.forEach(type => {
         const button = document.createElement('button');
         button.innerHTML = `<i class="fas fa-plus"></i> ${type}`;
         button.addEventListener('click', () => addBlock(type));
@@ -178,6 +213,11 @@ function renderBlockTypeButtons() {
         // Add ripple effect
         button.addEventListener('click', createRipple);
     });
+    
+    // Ensure the undo button is properly positioned
+    if (undoBtn.parentNode !== undoBtnParent) {
+        undoBtnParent.appendChild(undoBtn);
+    }
 }
 
 // Ripple effect for buttons
@@ -416,8 +456,8 @@ function addType() {
     if (newType && /^[A-Z]+$/.test(newType)) {
         if (!blockTypes.includes(newType)) {
             blockTypes.push(newType);
-            saveData();
             renderBlockTypeButtons();
+            saveData();
             showToast(`Type ${newType} ajouté`, 'success');
         } else {
             showToast('Ce type existe déjà', 'error');
@@ -580,21 +620,29 @@ function acceptSuggestion(blockIndex, suggestion) {
 
 // Toggle project sidebar
 function toggleProjectSidebar(show) {
-    const isVisible = projectSidebar.style.display !== 'none';
-    if (show !== undefined ? !show : isVisible) {
-        projectSidebar.style.display = 'none';
+    // Get current visibility state
+    const isVisible = projectSidebar.getAttribute('data-visible') === 'true';
+    
+    if (show === undefined) {
+        // Toggle mode - invert current state
+        projectSidebar.setAttribute('data-visible', isVisible ? 'false' : 'true');
     } else {
-        projectSidebar.style.display = 'block';
+        // Explicit mode
+        projectSidebar.setAttribute('data-visible', show ? 'true' : 'false');
     }
 }
 
 // Toggle tools sidebar
 function toggleToolsSidebar(show) {
-    const isVisible = toolsSidebar.style.display !== 'none';
-    if (show !== undefined ? !show : isVisible) {
-        toolsSidebar.style.display = 'none';
+    // Get current visibility state
+    const isVisible = toolsSidebar.getAttribute('data-visible') === 'true';
+    
+    if (show === undefined) {
+        // Toggle mode - invert current state
+        toolsSidebar.setAttribute('data-visible', isVisible ? 'false' : 'true');
     } else {
-        toolsSidebar.style.display = 'block';
+        // Explicit mode
+        toolsSidebar.setAttribute('data-visible', show ? 'true' : 'false');
     }
 }
 

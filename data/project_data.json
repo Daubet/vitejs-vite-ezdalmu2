@@ -1,34 +1,16 @@
 {
   "blocks": [
     {
-      "comment": "",
-      "content": "C'est juste.",
+      "type": "ADOLF",
       "number": 1,
-      "type": "ADOLF"
-    },
-    {
-      "comment": "",
-      "content": "Je n'ai pas tort.",
-      "number": 2,
-      "type": "ADOLF"
-    },
-    {
-      "comment": "ca dit quoi",
       "content": "",
+      "comment": ""
+    },
+    {
+      "type": "GB",
       "number": 1,
-      "type": "DB"
-    },
-    {
-      "comment": "",
       "content": "",
-      "number": 2,
-      "type": "DB"
-    },
-    {
-      "comment": "",
-      "content": "",
-      "number": 1,
-      "type": "C"
+      "comment": ""
     }
   ],
   "blockTypes": [
@@ -36,6 +18,8 @@
     "B",
     "DB",
     "C",
-    "ADOLF"
+    "ADOLF",
+    "HC",
+    "GB"
   ]
 }

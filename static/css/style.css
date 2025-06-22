@@ -136,6 +136,18 @@ button:disabled {
     filter: brightness(1.1);
 }
 
+.btn-add-block {
+    background-color: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.btn-add-block:hover {
+    background-color: var(--primary);
+    color: white;
+}
+
 .button-group {
     display: flex;
     flex-wrap: wrap;
@@ -301,6 +313,17 @@ textarea {
     flex-shrink: 0;
     box-shadow: var(--shadow);
     transition: var(--transition);
+    position: relative;
+    z-index: 100;
+}
+
+/* Utilisation de !important pour s'assurer que cette règle est prioritaire */
+.sidebar[data-visible="false"] {
+    display: none !important;
+}
+
+.sidebar[data-visible="true"] {
+    display: block !important;
 }
 
 .sidebar.tools {
