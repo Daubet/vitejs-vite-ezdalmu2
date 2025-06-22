@@ -1014,4 +1014,126 @@ hr {
         height: 4px;
         width: 80px;
     }
+}
+
+/* Webtoon extractor styles */
+.webtoon-extractor {
+    margin-bottom: 15px;
+}
+
+.webtoon-extractor .input-wrapper {
+    margin-bottom: 10px;
+}
+
+.webtoon-extractor input {
+    width: 100%;
+    padding: 8px 10px;
+}
+
+.status-message {
+    margin: 10px 0;
+    font-size: 0.9rem;
+    color: var(--text-light);
+}
+
+.status-message.success {
+    color: var(--success);
+}
+
+.status-message.error {
+    color: var(--warning);
+}
+
+.progress-bar-container {
+    height: 6px;
+    background-color: var(--border);
+    border-radius: var(--radius);
+    margin: 10px 0;
+    overflow: hidden;
+    display: none;
+}
+
+.progress-bar-container.active {
+    display: block;
+}
+
+.progress-bar {
+    height: 100%;
+    background-color: var(--primary);
+    width: 0;
+    transition: width 0.3s ease;
+}
+
+/* Extracted images styles */
+.extracted-images {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-top: 15px;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 5px;
+}
+
+.extracted-images::-webkit-scrollbar {
+    width: 6px;
+}
+
+.extracted-images::-webkit-scrollbar-track {
+    background: var(--bg);
+}
+
+.extracted-images::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.extracted-image-item {
+    position: relative;
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    background: var(--bg);
+    transition: transform 0.2s ease;
+}
+
+.extracted-image-item:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.extracted-image-item .thumbnail {
+    width: 100%;
+    height: 80px;
+    object-fit: cover;
+    display: block;
+}
+
+.image-actions {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    justify-content: space-around;
+    padding: 5px;
+    opacity: 0.7;
+    transition: opacity 0.2s ease;
+}
+
+.extracted-image-item:hover .image-actions {
+    opacity: 1;
+}
+
+.image-actions button {
+    padding: 3px 5px;
+    font-size: 0.8rem;
+    background: transparent;
+    color: white;
+    border: 1px solid rgba(255,255,255,0.5);
+}
+
+.image-actions button:hover {
+    background: rgba(255,255,255,0.2);
 } 

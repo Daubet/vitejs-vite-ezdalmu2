@@ -39,6 +39,21 @@
                 <input id="file-upload-image" type="file" accept="image/*" style="display: none;">
                 <input id="file-upload-pdf" type="file" accept=".pdf" style="display: none;">
             </div>
+            <hr>
+            <h4><i class="fas fa-globe"></i> Extraction Webtoon</h4>
+            <div class="webtoon-extractor">
+                <div class="input-wrapper">
+                    <input type="text" id="webtoon-url" placeholder="URL du webtoon à extraire">
+                </div>
+                <button id="btn-extract-webtoon" class="btn-primary"><i class="fas fa-download"></i> Extraire</button>
+                <div id="extraction-status" class="status-message"></div>
+                <div id="extraction-progress" class="progress-bar-container">
+                    <div class="progress-bar"></div>
+                </div>
+                <div id="extracted-images-container" class="extracted-images">
+                    <!-- Les images extraites seront affichées ici -->
+                </div>
+            </div>
         </aside>
 
         <!-- Main Content with Resizable Panels -->
@@ -124,6 +139,17 @@
             </div>
             <div class="suggestions" style="display: none;">
                 <!-- AI suggestions will be added here -->
+            </div>
+        </div>
+    </template>
+
+    <!-- Extracted Image Template -->
+    <template id="extracted-image-template">
+        <div class="extracted-image-item">
+            <img src="" alt="Extracted Image" class="thumbnail">
+            <div class="image-actions">
+                <button class="view-btn" title="Voir l'image"><i class="fas fa-eye"></i></button>
+                <button class="use-btn" title="Utiliser cette image"><i class="fas fa-check"></i></button>
             </div>
         </div>
     </template>

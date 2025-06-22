@@ -1,6 +1,6 @@
 // State management
 let blocks = [];
-let blockTypes = ['HB', 'B', 'DB', 'C'];
+let blockTypes = ['HB', 'B', 'DB', 'C', 'HC'];
 let customTypes = [];
 let history = [];
 let aiMap = {};
@@ -39,6 +39,12 @@ const btnCloseViewer = document.getElementById('btn-close-viewer');
 const pageInfo = document.getElementById('page-info');
 const fileUploadImage = document.getElementById('file-upload-image');
 const fileUploadPDF = document.getElementById('file-upload-pdf');
+const webtoonUrlInput = document.getElementById('webtoon-url');
+const btnExtractWebtoon = document.getElementById('btn-extract-webtoon');
+const extractionStatus = document.getElementById('extraction-status');
+const extractionProgress = document.getElementById('extraction-progress');
+const extractedImagesContainer = document.getElementById('extracted-images-container');
+const extractedImageTemplate = document.getElementById('extracted-image-template');
 
 // Initialize app
 function init() {
@@ -152,6 +158,9 @@ function setupEventListeners() {
     document.getElementById('btn-upload-pdf').addEventListener('click', () => fileUploadPDF.click());
     fileUploadImage.addEventListener('change', handleImageUpload);
     fileUploadPDF.addEventListener('change', handlePDFUpload);
+
+    // Webtoon extraction
+    btnExtractWebtoon.addEventListener('click', extractWebtoon);
 }
 
 // Handle keyboard shortcuts
@@ -666,10 +675,10 @@ async function loadData() {
         const response = await fetch('/api/load');
         const data = await response.json();
         blocks = data.blocks || [];
-        blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C'];
+        blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
         
         // Séparer les types par défaut des types personnalisés
-        const defaultTypes = ['HB', 'B', 'DB', 'C'];
+        const defaultTypes = ['HB', 'B', 'DB', 'C', 'HC'];
         customTypes = blockTypes.filter(type => !defaultTypes.includes(type));
         
         history = [];
@@ -724,7 +733,7 @@ async function saveData() {
 // Render block type buttons
 function renderBlockTypeButtons() {
     // Use default types if none are loaded yet
-    const typesToRender = blockTypes.length > 0 ? blockTypes : ['HB', 'B', 'DB', 'C'];
+    const typesToRender = blockTypes.length > 0 ? blockTypes : ['HB', 'B', 'DB', 'C', 'HC'];
     
     // Clear existing type buttons
     const undoBtn = document.getElementById('btn-undo');
@@ -1450,6 +1459,165 @@ function deleteBlock(index) {
     document.getElementById('btn-undo').disabled = false;
     
     showToast(`Bloc ${block.type}${block.number} supprimé`, 'success');
+}
+
+// Extract webtoon from URL
+async function extractWebtoon() {
+    let url = webtoonUrlInput.value.trim();
+    if (!url) {
+        showToast('Veuillez entrer une URL valide', 'error');
+        return;
+    }
+    
+    // Check if URL is valid
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+    }
+    
+    // Remove @ symbol if present (common when copying URLs)
+    if (url.startsWith('@http')) {
+        url = url.substring(1);
+    }
+    
+    // Update the input field with the cleaned URL
+    webtoonUrlInput.value = url;
+    
+    // Show loading state
+    btnExtractWebtoon.disabled = true;
+    extractionStatus.textContent = 'Extraction en cours...';
+    extractionStatus.className = 'status-message';
+    extractionProgress.classList.add('active');
+    extractionProgress.querySelector('.progress-bar').style.width = '10%';
+    extractedImagesContainer.innerHTML = '';
+    
+    try {
+        // Call the API to extract images
+        const response = await fetch('/api/extract-webtoon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url })
+        });
+        
+        // Update progress
+        extractionProgress.querySelector('.progress-bar').style.width = '50%';
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur lors de l\'extraction');
+        }
+        
+        const data = await response.json();
+        
+        // Update progress
+        extractionProgress.querySelector('.progress-bar').style.width = '80%';
+        
+        if (data.images && data.images.length > 0) {
+            // Display extracted images
+            displayExtractedImages(data.images);
+            
+            extractionStatus.textContent = `${data.images.length} images extraites avec succès`;
+            extractionStatus.className = 'status-message success';
+            
+            // Open project sidebar if it's not already open
+            if (projectSidebar.getAttribute('data-visible') === 'false') {
+                projectSidebar.setAttribute('data-visible', 'true');
+            }
+        } else {
+            extractionStatus.textContent = 'Aucune image trouvée';
+            extractionStatus.className = 'status-message error';
+        }
+    } catch (error) {
+        console.error('Extraction error:', error);
+        extractionStatus.textContent = `Erreur: ${error.message}`;
+        extractionStatus.className = 'status-message error';
+    } finally {
+        // Complete progress bar
+        extractionProgress.querySelector('.progress-bar').style.width = '100%';
+        setTimeout(() => {
+            extractionProgress.classList.remove('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '0';
+        }, 1000);
+        
+        btnExtractWebtoon.disabled = false;
+    }
+}
+
+// Display extracted images
+function displayExtractedImages(images) {
+    extractedImagesContainer.innerHTML = '';
+    
+    images.forEach(image => {
+        // Clone the template
+        const imageElement = extractedImageTemplate.content.cloneNode(true);
+        
+        // Set image source
+        const thumbnail = imageElement.querySelector('.thumbnail');
+        thumbnail.src = image.url;
+        thumbnail.alt = image.filename;
+        
+        // Add event listeners to buttons
+        const viewBtn = imageElement.querySelector('.view-btn');
+        const useBtn = imageElement.querySelector('.use-btn');
+        
+        viewBtn.addEventListener('click', () => {
+            showExtractedImage(image);
+        });
+        
+        useBtn.addEventListener('click', () => {
+            useExtractedImage(image);
+        });
+        
+        // Add to container
+        extractedImagesContainer.appendChild(imageElement);
+    });
+}
+
+// Show extracted image in viewer
+function showExtractedImage(image) {
+    // Show the viewer
+    openViewer();
+
+    // Clear any previous content
+    pdfContainer.innerHTML = '';
+    
+    // Set file name in the viewer
+    viewerFilename.textContent = image.filename;
+    
+    // Disable PDF navigation
+    btnPrevPage.disabled = true;
+    btnNextPage.disabled = true;
+    pageInfo.textContent = '';
+    
+    // Display the image
+    imageViewer.src = image.url;
+    imageViewer.style.display = 'block';
+    currentZoom = 1.0;
+    imageViewer.style.transform = `scale(${currentZoom})`;
+}
+
+// Use extracted image (add a block with reference)
+function useExtractedImage(image) {
+    // Create a new block
+    const blockType = 'HC'; // Use HC block type for images
+    addBlock(blockType);
+    
+    // Get the last added block
+    const lastBlock = blocks[blocks.length - 1];
+    
+    // Add image reference to the block content
+    const imageFilename = image.filename;
+    const imageUrl = image.url;
+    lastBlock.content = `[Image: ${imageFilename}]`;
+    lastBlock.comment = `Image URL: ${imageUrl}`;
+    
+    // Render blocks to update the UI
+    renderBlocks();
+    
+    // Save changes
+    saveData();
+    
+    // Show toast
+    showToast('Image ajoutée comme bloc HC');
 }
 
 // Initialize app when DOM is loaded

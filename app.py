@@ -9,6 +9,9 @@ import tempfile
 import logging
 import uuid
 import shutil
+import re
+import time
+from urllib.parse import urljoin, urlparse
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -31,7 +34,7 @@ DATA_FILE = 'data/project_data.json'
 def get_default_data():
     return {
         'blocks': [],
-        'blockTypes': ['HB', 'B', 'DB', 'C']
+        'blockTypes': ['HB', 'B', 'DB', 'C', 'HC']
     }
 
 # Load project data
@@ -65,6 +68,138 @@ def api_save():
         return jsonify({"error": "Invalid JSON"}), 400
     save_data(data)
     return jsonify({"status": "success"})
+
+@app.route('/api/extract-webtoon', methods=['POST'])
+def api_extract_webtoon():
+    """Extract images from a webtoon URL"""
+    data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    url = data.get('url', '')
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+    
+    try:
+        # Create a folder for this extraction
+        extraction_id = str(uuid.uuid4())[:8]
+        extraction_folder = os.path.join(app.config['UPLOAD_FOLDER'], f'webtoon_{extraction_id}')
+        os.makedirs(extraction_folder, exist_ok=True)
+        
+        # Extract images
+        images = extract_webtoon_images(url, extraction_folder)
+        
+        if not images:
+            return jsonify({"error": "No images found or could not access the website"}), 404
+        
+        # Return image URLs and info
+        return jsonify({
+            "status": "success",
+            "extraction_id": extraction_id,
+            "images": images
+        })
+    except Exception as e:
+        logging.error(f"Extraction error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def extract_webtoon_images(url, save_folder):
+    """Extract images from a webtoon URL and save them to the specified folder using regex"""
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+    }
+    
+    try:
+        # Get the webpage content
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        
+        html_content = response.text
+        
+        # Use regex to find image URLs
+        # This pattern matches common image URLs in HTML
+        img_patterns = [
+            r'<img[^>]+src=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']',  # Standard img src
+            r'<img[^>]+data-src=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']',  # Lazy loaded images
+            r'<img[^>]+data-original=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']',  # Another lazy load pattern
+            r'content=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']',  # Meta images
+            r'background-image:\s*url\(["\']?(https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']?\)',  # CSS background images
+        ]
+        
+        # For asuracomic.net specifically
+        if 'asuracomic.net' in url:
+            logging.info("Detected asuracomic.net, using specific patterns")
+            img_patterns.append(r'<div class="page-break[^>]*>.*?<img[^>]+src=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']')
+            img_patterns.append(r'<div class="reading-content[^>]*>.*?<img[^>]+src=["\'](https?://[^"\']+\.(jpg|jpeg|png|gif|webp))["\']')
+        
+        all_image_urls = []
+        for pattern in img_patterns:
+            matches = re.findall(pattern, html_content)
+            for match in matches:
+                # The first group contains the URL
+                if isinstance(match, tuple):
+                    img_url = match[0]
+                else:
+                    img_url = match
+                
+                if img_url not in all_image_urls:
+                    all_image_urls.append(img_url)
+        
+        logging.info(f"Found {len(all_image_urls)} potential image URLs")
+        
+        # Filter out small images and icons (usually width/height in attributes or URL contains 'icon', 'logo', etc.)
+        filtered_urls = []
+        for img_url in all_image_urls:
+            if not any(x in img_url.lower() for x in ['icon', 'logo', 'banner', 'button', 'thumbnail', 'avatar']):
+                filtered_urls.append(img_url)
+        
+        logging.info(f"After filtering: {len(filtered_urls)} image URLs")
+        
+        images = []
+        for i, img_url in enumerate(filtered_urls):
+            try:
+                # Download the image
+                img_response = requests.get(img_url, headers=headers)
+                img_response.raise_for_status()
+                
+                # Determine file extension
+                content_type = img_response.headers.get('Content-Type', '')
+                ext = '.jpg'  # Default extension
+                if 'image/png' in content_type:
+                    ext = '.png'
+                elif 'image/gif' in content_type:
+                    ext = '.gif'
+                elif 'image/webp' in content_type:
+                    ext = '.webp'
+                
+                # Save the image
+                img_filename = f'image_{i+1:03d}{ext}'
+                img_path = os.path.join(save_folder, img_filename)
+                
+                with open(img_path, 'wb') as f:
+                    f.write(img_response.content)
+                
+                # Create URL for the saved image
+                img_url_path = url_for('static', filename=f'uploads/webtoon_{os.path.basename(save_folder)}/{img_filename}')
+                
+                images.append({
+                    'filename': img_filename,
+                    'url': img_url_path,
+                    'path': img_path
+                })
+                
+                logging.info(f"Successfully saved image: {img_filename}")
+                
+                # Be nice to the server
+                time.sleep(0.5)
+                
+            except Exception as e:
+                logging.error(f"Error downloading image {img_url}: {str(e)}")
+        
+        return images
+        
+    except Exception as e:
+        logging.error(f"Error extracting images from {url}: {str(e)}")
+        raise e
 
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
