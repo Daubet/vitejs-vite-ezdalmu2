@@ -764,6 +764,7 @@ hr {
     transition: width 0.15s ease-out; /* Smoother transition */
     position: relative; /* Needed for proper resize */
     min-width: 100px; /* Prevent it from becoming too narrow */
+    will-change: width; /* Optimize for animations */
 }
 
 .viewer-header {
@@ -902,13 +903,14 @@ hr {
 
 /* Resizer handle - improved for better usability */
 .resizer {
-    width: 8px; /* Slightly wider for easier grabbing */
+    width: 12px; /* Wider for easier grabbing */
     background: var(--border);
     cursor: col-resize;
     z-index: 10;
     transition: background 0.2s ease;
     position: relative;
     flex-shrink: 0; /* Prevent the resizer from shrinking */
+    margin: 0 -2px; /* Extend clickable area */
 }
 
 /* Add a visible handle grip */
@@ -918,18 +920,26 @@ hr {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    height: 50px;
+    height: 80px;
     width: 4px;
-    background: rgba(0,0,0,0.1);
+    background: rgba(0,0,0,0.15);
     border-radius: 2px;
 }
 
-.resizer:hover, .resizer.active {
+.resizer:hover {
+    background: var(--primary-light);
+}
+
+.resizer.active {
     background: var(--primary);
 }
 
-.resizer:hover::after, .resizer.active::after {
-    background: rgba(255,255,255,0.6);
+.resizer:hover::after {
+    background: var(--primary);
+}
+
+.resizer.active::after {
+    background: rgba(255,255,255,0.8);
 }
 
 /* File manager in sidebar */
@@ -990,17 +1000,18 @@ hr {
         min-width: auto;
         min-height: 150px;
         transition: height 0.15s ease-out;
+        will-change: height; /* Optimize for animations */
     }
     
     .resizer {
         width: 100%;
-        height: 8px;
+        height: 12px;
         cursor: row-resize;
     }
     
     /* Change the handle orientation for mobile */
     .resizer::after {
         height: 4px;
-        width: 50px;
+        width: 80px;
     }
 } 

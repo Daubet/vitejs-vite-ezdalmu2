@@ -51,6 +51,9 @@ function init() {
     // Ensure tools sidebar is hidden by default
     toolsSidebar.setAttribute('data-visible', 'false');
     
+    // Initialize viewer panel
+    initializeViewerPanel();
+    
     // Hide viewer panel by default
     viewerPanel.classList.add('hidden');
     mainContent.classList.add('full-width');
@@ -71,6 +74,24 @@ function init() {
 
     // Initialize PDF.js
     pdfjsLib.GlobalWorkerOptions.workerSrc = '/static/js/lib/pdf.worker.min.js';
+}
+
+// Initialize viewer panel with saved dimensions or defaults
+function initializeViewerPanel() {
+    // Initialize from saved width if available
+    const savedWidth = localStorage.getItem('viewer-width');
+    if (savedWidth) {
+        document.documentElement.style.setProperty('--viewer-width', savedWidth);
+    } else {
+        // Default to 40% width
+        document.documentElement.style.setProperty('--viewer-width', '40%');
+    }
+    
+    // Initialize height for mobile view
+    const savedHeight = localStorage.getItem('viewer-height');
+    if (savedHeight && window.innerWidth <= 768) {
+        viewerPanel.style.height = savedHeight;
+    }
 }
 
 // Setup event listeners
@@ -180,57 +201,87 @@ function showToast(message, type = 'info') {
 // Setup resizable panel
 function setupResizablePanel() {
     let isResizing = false;
-    let lastX, lastY;
-    let initialWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--viewer-width'));
+    let startWidth, startHeight;
+    let startPosition;
+    let startX, startY;
     
-    if (isNaN(initialWidth)) {
-        initialWidth = 40; // default fallback
-    }
-
     // Throttle function to limit the rate of execution
     function throttle(func, limit) {
-        let inThrottle;
+        let lastFunc;
+        let lastRan;
         return function() {
-            const args = arguments;
             const context = this;
-            if (!inThrottle) {
+            const args = arguments;
+            if (!lastRan) {
                 func.apply(context, args);
-                inThrottle = true;
-                setTimeout(() => inThrottle = false, limit);
+                lastRan = Date.now();
+            } else {
+                clearTimeout(lastFunc);
+                lastFunc = setTimeout(function() {
+                    if ((Date.now() - lastRan) >= limit) {
+                        func.apply(context, args);
+                        lastRan = Date.now();
+                    }
+                }, limit - (Date.now() - lastRan));
             }
         };
     }
 
-    // Smoother resize handler with throttling
+    // Smoother resize handler with reduced sensitivity
     const handleResize = throttle((clientX, clientY) => {
         if (!isResizing) return;
 
         // Use requestAnimationFrame for smoother rendering
         requestAnimationFrame(() => {
             if (window.innerWidth <= 768) { // Mobile view (vertical resizing)
-                const containerHeight = document.querySelector('.content-wrapper').offsetHeight;
-                const calculatedHeight = (clientY / containerHeight) * 100;
+                // Calculate delta with reduced sensitivity
+                const deltaY = (clientY - startY) * 0.4; // Reduce sensitivity by 60%
+                
+                // Apply delta to starting height
+                let newHeightPx = startHeight + deltaY;
+                let containerHeight = document.querySelector('.content-wrapper').offsetHeight;
+                let newHeightPercent = (newHeightPx / containerHeight) * 100;
                 
                 // Limit height between 20% and 80%
-                const newHeight = Math.max(20, Math.min(80, calculatedHeight));
+                newHeightPercent = Math.max(20, Math.min(80, newHeightPercent));
                 
                 // Update CSS for height
-                viewerPanel.style.height = `${newHeight}%`;
+                viewerPanel.style.height = `${newHeightPercent}%`;
+                
+                // Save current height to localStorage
+                localStorage.setItem('viewer-height', `${newHeightPercent}%`);
             } else { // Desktop view (horizontal resizing)
-                const containerWidth = document.querySelector('.content-wrapper').offsetWidth;
-                const calculatedWidth = (clientX / containerWidth) * 100;
+                // Calculate delta with reduced sensitivity
+                const deltaX = (clientX - startX) * 0.4; // Reduce sensitivity by 60%
+                
+                // Apply delta to starting width
+                let newWidthPx = startWidth + deltaX;
+                let containerWidth = document.querySelector('.content-wrapper').offsetWidth;
+                let newWidthPercent = (newWidthPx / containerWidth) * 100;
                 
                 // Limit width between 20% and 80%
-                const newWidth = Math.max(20, Math.min(80, calculatedWidth));
+                newWidthPercent = Math.max(20, Math.min(80, newWidthPercent));
                 
                 // Update CSS variable for width
-                document.documentElement.style.setProperty('--viewer-width', `${newWidth}%`);
+                document.documentElement.style.setProperty('--viewer-width', `${newWidthPercent}%`);
+                
+                // Save current width to localStorage
+                localStorage.setItem('viewer-width', `${newWidthPercent}%`);
             }
         });
-    }, 10); // throttle at 10ms for smooth but efficient updates
+    }, 20); // throttle at 20ms for smoother updates
 
     resizer.addEventListener('mousedown', (e) => {
         isResizing = true;
+        
+        // Store initial mouse position
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        // Store initial dimensions
+        startWidth = viewerPanel.offsetWidth;
+        startHeight = viewerPanel.offsetHeight;
+        
         resizer.classList.add('active');
         document.body.style.cursor = window.innerWidth <= 768 ? 'row-resize' : 'col-resize';
         document.body.style.userSelect = 'none'; // Prevent text selection while resizing
@@ -241,10 +292,21 @@ function setupResizablePanel() {
 
     // Touch events for mobile
     resizer.addEventListener('touchstart', (e) => {
+        if (!e.touches[0]) return;
+        
         isResizing = true;
+        
+        // Store initial touch position
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        
+        // Store initial dimensions
+        startWidth = viewerPanel.offsetWidth;
+        startHeight = viewerPanel.offsetHeight;
+        
         resizer.classList.add('active');
         document.body.style.userSelect = 'none';
-        document.addEventListener('touchmove', touchMoveHandler);
+        document.addEventListener('touchmove', touchMoveHandler, { passive: false });
         document.addEventListener('touchend', stopResize);
         e.preventDefault();
     });
@@ -256,10 +318,13 @@ function setupResizablePanel() {
 
     function touchMoveHandler(e) {
         if (!isResizing || !e.touches[0]) return;
+        e.preventDefault(); // Prevent scrolling while resizing
         handleResize(e.touches[0].clientX, e.touches[0].clientY);
     }
 
     function stopResize() {
+        if (!isResizing) return;
+        
         isResizing = false;
         resizer.classList.remove('active');
         document.body.style.cursor = '';
