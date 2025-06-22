@@ -21,7 +21,16 @@
                 <button id="btn-reset" class="btn-warning"><i class="fas fa-trash-alt"></i> Reset</button>
             </div>
             <hr>
-            <button id="btn-add-type" class="btn-primary"><i class="fas fa-plus-circle"></i> Nouveau Type</button>
+            <h4><i class="fas fa-tags"></i> Types de blocs</h4>
+            <div class="types-manager">
+                <button id="btn-add-type" class="btn-primary"><i class="fas fa-plus-circle"></i> Nouveau Type</button>
+                <div class="types-list">
+                    <div id="custom-types-container" class="types-chips">
+                        <!-- Les types personnalisés seront affichés ici -->
+                        <p class="info-text">Aucun type personnalisé</p>
+                    </div>
+                </div>
+            </div>
         </aside>
 
         <!-- Main Content -->
@@ -73,6 +82,7 @@
             <div class="block-actions">
                 <button class="ai-btn" title="Suggestions IA"><i class="fas fa-robot"></i></button>
                 <button class="comment-btn" title="Ajouter un commentaire"><i class="fas fa-comment"></i></button>
+                <button class="delete-btn" title="Supprimer ce bloc"><i class="fas fa-trash-alt"></i></button>
             </div>
             <div class="comment-container" style="display: none;">
                 <textarea class="comment-textarea" rows="1" placeholder="Commentaire (non inclus dans l'export Word)..."></textarea>

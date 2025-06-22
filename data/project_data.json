@@ -1,16 +1,10 @@
 {
   "blocks": [
     {
-      "type": "ADOLF",
+      "comment": "",
+      "content": "Il faut faire des efforts.",
       "number": 1,
-      "content": "",
-      "comment": ""
-    },
-    {
-      "type": "GB",
-      "number": 1,
-      "content": "",
-      "comment": ""
+      "type": "HB"
     }
   ],
   "blockTypes": [
@@ -18,8 +12,6 @@
     "B",
     "DB",
     "C",
-    "ADOLF",
-    "HC",
-    "GB"
+    "HC"
   ]
 }

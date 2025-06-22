@@ -1,6 +1,7 @@
 // State management
 let blocks = [];
 let blockTypes = ['HB', 'B', 'DB', 'C'];
+let customTypes = [];
 let history = [];
 let aiMap = {};
 let theme = localStorage.getItem('wtoon-theme') || 'light';
@@ -32,6 +33,7 @@ function init() {
     
     // Render block type buttons immediately with default types
     renderBlockTypeButtons();
+    renderCustomTypes(); // Initialiser la liste des types personnalisés
     
     setupEventListeners();
     
@@ -140,10 +142,16 @@ async function loadData() {
         const data = await response.json();
         blocks = data.blocks || [];
         blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C'];
+        
+        // Séparer les types par défaut des types personnalisés
+        const defaultTypes = ['HB', 'B', 'DB', 'C'];
+        customTypes = blockTypes.filter(type => !defaultTypes.includes(type));
+        
         history = [];
         aiMap = {};
         renderBlocks();
         renderBlockTypeButtons();
+        renderCustomTypes(); // Afficher les types personnalisés
         updateBlockCount();
         showLoading(false);
     } catch (error) {
@@ -250,6 +258,7 @@ function renderBlocks() {
         const textareaEl = blockEl.querySelector('textarea');
         const aiBtn = blockEl.querySelector('.ai-btn');
         const commentBtn = blockEl.querySelector('.comment-btn');
+        const deleteBtn = blockEl.querySelector('.delete-btn');
         const commentContainer = blockEl.querySelector('.comment-container');
         const commentTextarea = blockEl.querySelector('.comment-textarea');
         const suggestionsEl = blockEl.querySelector('.suggestions');
@@ -277,9 +286,11 @@ function renderBlocks() {
         
         // Update block content
         textareaEl.addEventListener('input', (e) => {
+            pushHistory();
             block.content = e.target.value;
             autoResizeTextarea(e.target);
             saveData();
+            document.getElementById('btn-undo').disabled = false;
         });
         
         // Update comment content
@@ -295,11 +306,15 @@ function renderBlocks() {
             commentBtn.classList.toggle('active');
             if (commentContainer.style.display === 'block') {
                 commentTextarea.focus();
+                autoResizeTextarea(commentTextarea);
             }
         });
         
         // AI button
         aiBtn.addEventListener('click', () => askAi(index));
+        
+        // Gestionnaire d'événements pour le bouton de suppression
+        deleteBtn.addEventListener('click', () => deleteBlock(index));
         
         // Render AI suggestions if they exist
         if (aiMap[index] && aiMap[index].suggestions && aiMap[index].suggestions.length) {
@@ -309,13 +324,15 @@ function renderBlocks() {
         blocksContainer.appendChild(blockEl);
     });
     
-    // Scroll to bottom
-    blocksContainer.scrollTop = blocksContainer.scrollHeight;
-    
-    // Focus last textarea
-    const textareas = blocksContainer.querySelectorAll('textarea');
-    if (textareas.length > 0) {
-        textareas[textareas.length - 1].focus();
+    // Scroll to bottom if adding a new block
+    if (blocks.length > 0 && blocks[blocks.length - 1].content === '') {
+        blocksContainer.scrollTop = blocksContainer.scrollHeight;
+        
+        // Focus last textarea
+        const textareas = blocksContainer.querySelectorAll('textarea');
+        if (textareas.length > 0) {
+            textareas[textareas.length - 1].focus();
+        }
     }
 }
 
@@ -455,8 +472,56 @@ function addType() {
     const newType = prompt('Nouveau type de bloc:');
     if (newType && /^[A-Z]+$/.test(newType)) {
         if (!blockTypes.includes(newType)) {
+            // Ajouter aux deux tableaux
             blockTypes.push(newType);
+            customTypes.push(newType);
+            
+            // Mettre à jour l'UI avec animation
             renderBlockTypeButtons();
+            
+            // Animation pour le nouveau type
+            const container = document.getElementById('custom-types-container');
+            if (container) {
+                // Supprimer le message "Aucun type personnalisé" si présent
+                const infoText = container.querySelector('.info-text');
+                if (infoText) {
+                    infoText.remove();
+                }
+                
+                // Créer le nouvel élément
+                const typeItem = document.createElement('div');
+                typeItem.className = 'custom-type-item';
+                typeItem.style.opacity = '0';
+                typeItem.style.transform = 'scale(0.8)';
+                
+                const typeName = document.createElement('span');
+                typeName.className = 'custom-type-name';
+                typeName.textContent = newType;
+                
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'custom-type-delete';
+                deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+                deleteBtn.title = 'Supprimer ce type';
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    deleteCustomType(newType);
+                });
+                
+                typeItem.appendChild(typeName);
+                typeItem.appendChild(deleteBtn);
+                container.appendChild(typeItem);
+                
+                // Animation d'entrée
+                setTimeout(() => {
+                    typeItem.style.opacity = '1';
+                    typeItem.style.transform = 'scale(1)';
+                }, 10);
+            } else {
+                // Fallback si le conteneur n'est pas trouvé
+                renderCustomTypes();
+            }
+            
+            // Sauvegarder
             saveData();
             showToast(`Type ${newType} ajouté`, 'success');
         } else {
@@ -710,6 +775,156 @@ function updateGeminiKey() {
 // Update block count
 function updateBlockCount() {
     blockCountEl.textContent = `${blocks.length} bloc${blocks.length > 1 ? 's' : ''}`;
+}
+
+// Render custom types in the project sidebar
+function renderCustomTypes() {
+    const container = document.getElementById('custom-types-container');
+    
+    if (!container) return;
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // If no custom types, show message
+    if (customTypes.length === 0) {
+        container.innerHTML = '<p class="info-text">Aucun type personnalisé</p>';
+        return;
+    }
+    
+    // Add each custom type with delete button
+    customTypes.forEach(type => {
+        const typeItem = document.createElement('div');
+        typeItem.className = 'custom-type-item';
+        
+        const typeName = document.createElement('span');
+        typeName.className = 'custom-type-name';
+        typeName.textContent = type;
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'custom-type-delete';
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+        deleteBtn.title = 'Supprimer ce type';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation(); // Éviter la propagation du clic
+            deleteCustomType(type);
+        });
+        
+        // Animation d'entrée
+        typeItem.style.opacity = '0';
+        setTimeout(() => {
+            typeItem.style.opacity = '1';
+        }, 10);
+        
+        typeItem.appendChild(typeName);
+        typeItem.appendChild(deleteBtn);
+        container.appendChild(typeItem);
+    });
+}
+
+// Delete a custom type
+function deleteCustomType(type) {
+    // Confirm deletion
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer le type "${type}" ?`)) {
+        return;
+    }
+    
+    // Check if type is used by any blocks
+    const usedBlocks = blocks.filter(block => block.type === type);
+    if (usedBlocks.length > 0) {
+        if (!confirm(`Ce type est utilisé par ${usedBlocks.length} bloc(s). Ces blocs seront également supprimés. Voulez-vous continuer ?`)) {
+            return;
+        }
+        
+        // Remove all blocks of this type
+        pushHistory(); // Save state for undo
+        blocks = blocks.filter(block => block.type !== type);
+        document.getElementById('btn-undo').disabled = false;
+    }
+    
+    // Trouver l'élément à supprimer
+    const container = document.getElementById('custom-types-container');
+    const items = container.querySelectorAll('.custom-type-item');
+    let itemToRemove = null;
+    
+    items.forEach(item => {
+        const nameEl = item.querySelector('.custom-type-name');
+        if (nameEl && nameEl.textContent === type) {
+            itemToRemove = item;
+        }
+    });
+    
+    // Animation de sortie
+    if (itemToRemove) {
+        itemToRemove.style.opacity = '0';
+        itemToRemove.style.transform = 'scale(0.8)';
+        
+        // Attendre la fin de l'animation avant de supprimer
+        setTimeout(() => {
+            // Remove from customTypes
+            customTypes = customTypes.filter(t => t !== type);
+            
+            // Remove from blockTypes
+            blockTypes = blockTypes.filter(t => t !== type);
+            
+            // Update UI
+            renderCustomTypes();
+            renderBlockTypeButtons();
+            renderBlocks(); // Re-render blocks to reflect changes
+            updateBlockCount(); // Update block count
+            
+            // Save changes
+            saveData();
+            
+            showToast(`Type "${type}" et ses blocs associés supprimés`, 'success');
+        }, 300);
+    } else {
+        // Fallback si l'élément n'est pas trouvé
+        customTypes = customTypes.filter(t => t !== type);
+        blockTypes = blockTypes.filter(t => t !== type);
+        renderCustomTypes();
+        renderBlockTypeButtons();
+        renderBlocks();
+        updateBlockCount();
+        saveData();
+        showToast(`Type "${type}" et ses blocs associés supprimés`, 'success');
+    }
+}
+
+// Delete a block
+function deleteBlock(index) {
+    if (index < 0 || index >= blocks.length) return;
+    
+    const block = blocks[index];
+    
+    // Confirm deletion
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer ce bloc ${block.type}${block.number} ?`)) {
+        return;
+    }
+    
+    // Save state for undo
+    pushHistory();
+    
+    // Remove the block
+    blocks.splice(index, 1);
+    
+    // Update block numbers for remaining blocks of the same type
+    const sameTypeBlocks = blocks.filter(b => b.type === block.type);
+    sameTypeBlocks.forEach((b, i) => {
+        b.number = i + 1;
+    });
+    
+    // Update UI
+    renderBlocks();
+    updateBlockCount();
+    
+    // Save changes
+    saveData();
+    
+    // Enable undo button
+    document.getElementById('btn-undo').disabled = false;
+    
+    showToast(`Bloc ${block.type}${block.number} supprimé`, 'success');
 }
 
 // Initialize app when DOM is loaded

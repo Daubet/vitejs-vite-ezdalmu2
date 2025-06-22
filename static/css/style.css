@@ -357,6 +357,91 @@ textarea {
     color: var(--text);
 }
 
+.types-manager {
+    margin-top: 10px;
+}
+
+.types-list {
+    margin-top: 12px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    padding: 10px;
+    border: 1px solid var(--border);
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.types-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.custom-type-item {
+    display: inline-flex;
+    align-items: center;
+    background: var(--primary-light);
+    border: 1px solid var(--primary);
+    border-radius: 20px;
+    padding: 4px 10px 4px 12px;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    cursor: default;
+    user-select: none;
+}
+
+.custom-type-item:hover {
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+}
+
+.custom-type-name {
+    font-weight: 600;
+    color: var(--primary);
+    margin-right: 6px;
+    letter-spacing: 0.5px;
+}
+
+.custom-type-delete {
+    background: none;
+    border: none;
+    color: var(--warning);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    margin: 0;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+.custom-type-delete:hover {
+    opacity: 1;
+    background-color: var(--warning);
+    color: white;
+    transform: rotate(90deg);
+}
+
+.info-text {
+    color: var(--text-light);
+    font-style: italic;
+    text-align: center;
+    width: 100%;
+    margin: 5px 0;
+    font-size: 0.85rem;
+}
+
+/* Supprimer les anciens styles qui ne sont plus nécessaires */
+.custom-types-container {
+    display: none;
+}
+
 .report-container {
     background-color: var(--bg);
     border: 1px solid var(--border);
@@ -523,10 +608,31 @@ footer {
     background-color: var(--primary);
 }
 
+.block .delete-btn {
+    background-color: var(--warning);
+    color: white;
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition);
+    padding: 0;
+    font-size: 1rem;
+    opacity: 0.7;
+}
+
+.block .delete-btn:hover {
+    transform: scale(1.1);
+    filter: brightness(1.1);
+    opacity: 1;
+}
+
 .comment-container {
     margin-top: 10px;
-    border-left: 3px solid var(--text-light);
-    padding-left: 10px;
 }
 
 .comment-textarea {
