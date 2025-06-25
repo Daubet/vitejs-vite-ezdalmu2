@@ -7,10 +7,10 @@
       "type": "DB"
     },
     {
-      "type": "HC",
+      "comment": "",
+      "content": "aaaaaaaaaaaaaaaaaaaaa",
       "number": 1,
-      "content": "[Image: image_012.webp]",
-      "comment": ""
+      "type": "HC"
     }
   ],
   "blockTypes": [

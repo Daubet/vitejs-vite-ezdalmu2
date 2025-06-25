@@ -1023,6 +1023,7 @@ hr {
     width: 100%;
     overflow: auto;
     position: relative;
+    background-color: #1a1a1a;
 }
 
 #image-viewer {
@@ -1030,6 +1031,8 @@ hr {
     height: auto;
     object-fit: contain;
     transition: transform 0.2s ease;
+    transform-origin: center top;
+    display: block;
 }
 
 /* Special class for webtoon format images */
@@ -1061,55 +1064,47 @@ hr {
 
 /* Image navigation controls */
 .image-nav-controls {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(0,0,0,0.6);
-    border-radius: var(--radius);
-    padding: 8px;
+    position: absolute;
+    top: 15px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.6);
+    border-radius: 20px;
+    padding: 8px 15px;
     display: flex;
-    gap: 5px;
-    z-index: 100;
-    box-shadow: var(--shadow);
+    align-items: center;
+    gap: 10px;
+    z-index: 10000;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
 }
 
 .image-nav-controls button {
-    background: transparent;
+    background-color: transparent;
+    border: none;
     color: white;
-    border: 1px solid rgba(255,255,255,0.3);
-    padding: 5px 8px;
-    font-size: 0.8rem;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
 }
 
 .image-nav-controls button:hover {
-    background: rgba(255,255,255,0.2);
-    border-color: rgba(255,255,255,0.5);
+    background-color: rgba(255, 255, 255, 0.2);
 }
 
-.image-nav-controls .zoom-level {
+.zoom-level {
     color: white;
-    font-size: 0.8rem;
-    padding: 5px 8px;
-    border-radius: var(--radius);
-    background: rgba(255,255,255,0.1);
-    display: flex;
-    align-items: center;
+    margin: 0 5px;
+    font-size: 14px;
+    min-width: 45px;
+    text-align: center;
 }
 
-.image-nav-controls .zoom-help {
-    color: white;
-    font-size: 0.8rem;
-    padding: 5px 8px;
-    border-radius: var(--radius);
-    background: rgba(255,255,255,0.1);
-    display: flex;
-    align-items: center;
-    margin-left: 8px;
-}
-
-.image-nav-controls .zoom-help i {
-    margin-right: 5px;
-    color: var(--primary);
+.zoom-help {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    margin-left: 5px;
 }
 
 /* Resizer handle - improved for better usability */
@@ -1315,16 +1310,10 @@ hr {
 
 .extracted-image-item {
     position: relative;
-    border-radius: var(--radius);
+    margin-bottom: 10px;
+    border-radius: 4px;
     overflow: hidden;
-    box-shadow: var(--shadow);
-    background: var(--bg);
-    transition: transform 0.2s ease;
-}
-
-.extracted-image-item:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .extracted-image-item .thumbnail {
@@ -1334,31 +1323,158 @@ hr {
     display: block;
 }
 
-.image-actions {
+.extracted-image-item .image-actions {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px;
     display: flex;
-    justify-content: space-around;
-    padding: 5px;
-    opacity: 0.7;
-    transition: opacity 0.2s ease;
+    justify-content: center;
 }
 
-.extracted-image-item:hover .image-actions {
-    opacity: 1;
-}
-
-.image-actions button {
-    padding: 3px 5px;
-    font-size: 0.8rem;
-    background: transparent;
+.extracted-image-item .view-btn {
+    background-color: #4a6fa5;
     color: white;
-    border: 1px solid rgba(255,255,255,0.5);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    width: 100%;
 }
 
-.image-actions button:hover {
-    background: rgba(255,255,255,0.2);
+.extracted-image-item .view-btn:hover {
+    background-color: #385d8a;
+}
+
+/* Image navigation arrows - improved visibility and click area */
+.image-nav-arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    z-index: 10000;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+    font-size: 24px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    pointer-events: auto !important;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+}
+
+.image-nav-arrow:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    opacity: 1;
+    transform: translateY(-50%) scale(1.1);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+
+.image-nav-arrow:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+.prev-arrow {
+    left: 25px;
+}
+
+.next-arrow {
+    right: 25px;
+}
+
+.image-counter {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 20px;
+    font-size: 14px;
+    z-index: 100;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+/* Ensure image container has proper position context */
+.image-container {
+    position: relative;
+    overflow: auto;
+    height: 100%;
+    background-color: #1a1a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+/* Ensure image viewer has proper sizing */
+#image-viewer {
+    max-width: 100%;
+    height: auto;
+    transition: transform 0.2s ease;
+    transform-origin: center top;
+    display: block;
+}
+
+/* Webtoon format images */
+.webtoon-format {
+    max-width: none !important;
+    width: auto !important;
+}
+
+/* Fix viewer panel layout */
+#viewer-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+}
+
+.viewer-header {
+    padding: 10px 15px;
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    z-index: 10;
+}
+
+.viewer-content {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make scrollbar more visible */
+.image-container::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+.image-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.image-container::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    border: 2px solid rgba(0, 0, 0, 0.2);
+}
+
+.image-container::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.5);
 } 

@@ -686,10 +686,20 @@ function prevPage() {
 function openViewer() {
     viewerPanel.classList.remove('hidden');
     mainContent.classList.remove('full-width');
+    
+    // Reset state
     currentPDFDoc = null;
     currentPage = 1;
     totalPages = 0;
     currentZoom = 1.0;
+    
+    // Make sure the viewer panel is visible
+    viewerPanel.style.display = 'flex';
+    
+    // Reset containers
+    pdfContainer.innerHTML = '';
+    imageViewer.src = '';
+    imageViewer.style.display = 'none';
 }
 
 // Close viewer
@@ -1675,7 +1685,10 @@ async function extractFirecrawl() {
 function displayExtractedImages(images) {
     extractedImagesContainer.innerHTML = '';
     
-    images.forEach(image => {
+    // Store images in a global variable for navigation
+    window.extractedImages = images;
+    
+    images.forEach((image, index) => {
         // Clone the template
         const imageElement = extractedImageTemplate.content.cloneNode(true);
         
@@ -1684,17 +1697,18 @@ function displayExtractedImages(images) {
         thumbnail.src = image.url;
         thumbnail.alt = image.filename;
         
-        // Add event listeners to buttons
+        // Add event listener to the view button
         const viewBtn = imageElement.querySelector('.view-btn');
-        const useBtn = imageElement.querySelector('.use-btn');
-        
+        viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
         viewBtn.addEventListener('click', () => {
-            showExtractedImage(image);
+            showExtractedImage(image, index);
         });
         
-        useBtn.addEventListener('click', () => {
-            useExtractedImage(image);
-        });
+        // Remove the use button as it's redundant
+        const useBtn = imageElement.querySelector('.use-btn');
+        if (useBtn) {
+            useBtn.remove();
+        }
         
         // Add to container
         extractedImagesContainer.appendChild(imageElement);
@@ -1702,7 +1716,7 @@ function displayExtractedImages(images) {
 }
 
 // Show extracted image in viewer
-function showExtractedImage(image) {
+function showExtractedImage(image, index) {
     // Show the viewer
     openViewer();
 
@@ -1715,13 +1729,12 @@ function showExtractedImage(image) {
         existingControls.remove();
     }
     
+    // Remove existing navigation arrows if any
+    const existingArrows = document.querySelectorAll('.image-nav-arrow, .image-counter');
+    existingArrows.forEach(arrow => arrow.remove());
+    
     // Set file name in the viewer
     viewerFilename.textContent = image.filename;
-    
-    // Disable PDF navigation
-    btnPrevPage.disabled = true;
-    btnNextPage.disabled = true;
-    pageInfo.textContent = '';
     
     // Reset zoom before loading new image
     currentZoom = 1.0;
@@ -1768,13 +1781,67 @@ function showExtractedImage(image) {
     
     imageContainer.appendChild(navControls);
     
+    // Make sure image container is visible and PDF container is hidden
+    imageContainer.style.display = 'flex';
+    pdfContainer.style.display = 'none';
+    
     // Display the image
+    console.log("Setting image source to:", image.url);
     imageViewer.src = image.url;
     imageViewer.style.display = 'block';
     imageViewer.style.transform = `scale(${currentZoom})`;
     
+    console.log("Total images:", window.extractedImages?.length, "Current index:", index);
+    
+    // Configure navigation buttons if we have multiple images
+    if (window.extractedImages && window.extractedImages.length > 1) {
+        // Enable/disable navigation buttons based on position
+        btnPrevPage.disabled = index <= 0;
+        btnNextPage.disabled = index >= window.extractedImages.length - 1;
+        
+        // Update page info to show image position
+        pageInfo.textContent = `${index + 1} / ${window.extractedImages.length}`;
+        
+        // Set up navigation button click handlers
+        btnPrevPage.onclick = function() {
+            if (index > 0) {
+                console.log("Previous button clicked");
+                showExtractedImage(window.extractedImages[index - 1], index - 1);
+            }
+        };
+        
+        btnNextPage.onclick = function() {
+            if (index < window.extractedImages.length - 1) {
+                console.log("Next button clicked");
+                showExtractedImage(window.extractedImages[index + 1], index + 1);
+            }
+        };
+        
+        // Add keyboard navigation
+        const handleKeyNav = (e) => {
+            if (e.key === 'ArrowLeft' && index > 0) {
+                showExtractedImage(window.extractedImages[index - 1], index - 1);
+            } else if (e.key === 'ArrowRight' && index < window.extractedImages.length - 1) {
+                showExtractedImage(window.extractedImages[index + 1], index + 1);
+            }
+        };
+        
+        // Remove existing listener if any
+        document.removeEventListener('keydown', window.currentKeyNavHandler);
+        
+        // Add new listener
+        window.currentKeyNavHandler = handleKeyNav;
+        document.addEventListener('keydown', window.currentKeyNavHandler);
+    } else {
+        // Disable navigation if only one image
+        btnPrevPage.disabled = true;
+        btnNextPage.disabled = true;
+        pageInfo.textContent = '';
+    }
+    
     // Check if this is a webtoon format image after it loads
     imageViewer.onload = function() {
+        console.log("Image loaded:", this.naturalWidth, "x", this.naturalHeight);
         const aspectRatio = this.naturalWidth / this.naturalHeight;
         
         // If image is tall and narrow (typical webtoon format)
