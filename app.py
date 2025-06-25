@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_file, url_for
+from flask import Flask, render_template, request, jsonify, send_file, url_for, send_from_directory
 import os
 import json
 import requests
@@ -18,6 +18,7 @@ import mimetypes
 from firecrawl import AsyncFirecrawlApp
 from urllib.parse import urljoin, urlparse
 from werkzeug.utils import secure_filename
+from PIL import Image
 
 # Clé API Firecrawl par défaut
 FIRECRAWL_API_KEY = 'fc-4e2ef9d083654a49ab17a5dc27888c03'
@@ -68,9 +69,25 @@ def save_data(data):
     with open(DATA_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# Verify if response contains a real image
+def is_real_image(resp):
+    """Check if the response contains a real image"""
+    ct = resp.headers.get("Content-Type", "")
+    if not ct.startswith("image/"):
+        return False
+    # 12 bytes "RIFF????WEBP" for WebP files
+    if "webp" in ct:
+        return resp.content.startswith(b"RIFF") and b"WEBP" in resp.content[:12]
+    return True
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
+# Serve uploads explicitly
+@app.route('/uploads/<path:fname>')
+def serve_upload(fname):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], fname)
 
 @app.route('/api/load', methods=['GET'])
 def api_load():
@@ -183,12 +200,14 @@ def api_extract_firecrawl():
 def extract_webtoon_images(url, save_folder):
     """Extract images from a webtoon URL and save them to the specified folder using regex"""
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': url,                               # Add referer
+        'Accept': 'image/avif,image/webp,*/*'         # Add modern accept header
     }
     
     try:
         # Get the webpage content
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=20)
         response.raise_for_status()
         
         html_content = response.text
@@ -236,8 +255,13 @@ def extract_webtoon_images(url, save_folder):
         for i, img_url in enumerate(filtered_urls):
             try:
                 # Download the image
-                img_response = requests.get(img_url, headers=headers)
+                img_response = requests.get(img_url, headers=headers, timeout=20)
                 img_response.raise_for_status()
+                
+                # Check if it's a real image
+                if not is_real_image(img_response):
+                    logging.warning(f"Skipped non-image {img_url}")
+                    continue
                 
                 # Determine file extension
                 content_type = img_response.headers.get('Content-Type', '')
@@ -253,19 +277,40 @@ def extract_webtoon_images(url, save_folder):
                 img_filename = f'image_{i+1:03d}{ext}'
                 img_path = os.path.join(save_folder, img_filename)
                 
-                with open(img_path, 'wb') as f:
-                    f.write(img_response.content)
+                # For WebP files, consider converting to PNG if needed
+                if ext == '.webp':
+                    try:
+                        im = Image.open(io.BytesIO(img_response.content)).convert("RGB")
+                        # Save both WebP and PNG versions
+                        with open(img_path, 'wb') as f:
+                            f.write(img_response.content)
+                        
+                        # Also save as PNG for compatibility
+                        png_filename = f'image_{i+1:03d}.png'
+                        png_path = os.path.join(save_folder, png_filename)
+                        im.save(png_path, "PNG", optimize=True)
+                        
+                        # Use WebP version by default
+                        img_filename_to_use = img_filename
+                    except Exception as e:
+                        logging.error(f"WEBP convert error {img_url}: {e}")
+                        continue
+                else:
+                    with open(img_path, 'wb') as f:
+                        f.write(img_response.content)
+                    img_filename_to_use = img_filename
                 
-                # Create URL for the saved image
-                img_url_path = url_for('static', filename=f'uploads/webtoon_{os.path.basename(save_folder)}/{img_filename}')
+                # Create URL for the saved image using the new serve_upload route
+                folder_id = os.path.basename(save_folder)
+                img_url_path = url_for('serve_upload', fname=f'{folder_id}/{img_filename_to_use}')
                 
                 images.append({
-                    'filename': img_filename,
+                    'filename': img_filename_to_use,
                     'url': img_url_path,
                     'path': img_path
                 })
                 
-                logging.info(f"Successfully saved image: {img_filename}")
+                logging.info(f"Successfully saved image: {img_filename_to_use}")
                 
                 # Be nice to the server
                 time.sleep(0.5)
@@ -352,7 +397,7 @@ async def extract_firecrawl_images(url, api_key, save_folder):
                 img_path = os.path.join(save_folder, img_filename)
                 
                 # Create task for downloading the image
-                task = download_image(session, img_url, img_path, i)
+                task = download_image(session, img_url, img_path, i, url)
                 tasks.append(task)
             
             # Wait for all download tasks to complete
@@ -373,8 +418,9 @@ async def extract_firecrawl_images(url, api_key, save_folder):
                 img_path = result.get('path')
                 
                 if img_filename and img_path:
-                    # Create URL for the saved image
-                    img_url_path = url_for('static', filename=f'uploads/webtoon_{os.path.basename(save_folder)}/{img_filename}')
+                    # Create URL for the saved image using the new serve_upload route
+                    folder_id = os.path.basename(save_folder)
+                    img_url_path = url_for('serve_upload', fname=f'{folder_id}/{img_filename}')
                     
                     images.append({
                         'filename': img_filename,
@@ -388,16 +434,61 @@ async def extract_firecrawl_images(url, api_key, save_folder):
         logging.error(f"Error extracting images with Firecrawl from {url}: {str(e)}")
         raise e
 
-async def download_image(session, url, filepath, index):
+async def download_image(session, url, filepath, index, referer_url=None):
     """Download an image from a URL and save it to a file"""
     try:
-        async with session.get(url) as response:
+        # Add proper headers for image requests
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Accept': 'image/avif,image/webp,*/*'
+        }
+        
+        # Add referer if provided
+        if referer_url:
+            headers['Referer'] = referer_url
+            
+        async with session.get(url, headers=headers) as response:
             if response.status == 200:
-                # Open the file in binary write mode
-                async with aiofiles.open(filepath, mode='wb') as f:
-                    await f.write(await response.read())
+                content = await response.read()
                 
-                logging.info(f"Successfully downloaded: {filepath}")
+                # Check if it's a real image by examining content type and data
+                content_type = response.headers.get('Content-Type', '')
+                is_image = content_type.startswith('image/')
+                is_webp = 'webp' in content_type.lower()
+                
+                # For WebP, verify RIFF header
+                if is_webp and (not content.startswith(b"RIFF") or b"WEBP" not in content[:12]):
+                    logging.error(f"Invalid WebP image at {url}")
+                    return None
+                
+                if not is_image:
+                    logging.error(f"Not an image: {url} (Content-Type: {content_type})")
+                    return None
+                
+                # Handle WebP images - save both WebP and PNG versions
+                file_ext = os.path.splitext(filepath)[1].lower()
+                if file_ext == '.webp':
+                    try:
+                        # Save original WebP
+                        async with aiofiles.open(filepath, mode='wb') as f:
+                            await f.write(content)
+                        
+                        # Also save as PNG for compatibility
+                        im = Image.open(io.BytesIO(content)).convert("RGB")
+                        png_path = filepath.replace('.webp', '.png')
+                        im.save(png_path, "PNG", optimize=True)
+                        
+                        logging.info(f"Successfully downloaded and converted: {filepath}")
+                    except Exception as e:
+                        logging.error(f"WEBP convert error for {url}: {str(e)}")
+                        return None
+                else:
+                    # Save non-WebP image
+                    async with aiofiles.open(filepath, mode='wb') as f:
+                        await f.write(content)
+                    
+                    logging.info(f"Successfully downloaded: {filepath}")
+                
                 return {
                     'filename': os.path.basename(filepath),
                     'path': filepath,

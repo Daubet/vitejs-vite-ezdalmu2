@@ -569,27 +569,29 @@ async function renderAllPDFPages(container) {
     }
 }
 
-// Zoom in - modified for continuous view
+// Zoom in
 function zoomIn() {
-    currentZoom += 0.2;
-    if (currentZoom > 3) currentZoom = 3;
-    
     if (currentPDFDoc) {
+        // PDF zoom logic
+        currentZoom = Math.min(currentZoom * 1.25, 3.0);
         applyZoom();
-    } else if (imageViewer.style.display !== 'none') {
-        imageViewer.style.transform = `scale(${currentZoom})`;
+    } else {
+        // Image zoom logic
+        currentZoom = Math.min(currentZoom * 1.25, 5.0);
+        applyImageZoom();
     }
 }
 
-// Zoom out - modified for continuous view
+// Zoom out
 function zoomOut() {
-    currentZoom -= 0.2;
-    if (currentZoom < 0.5) currentZoom = 0.5;
-    
     if (currentPDFDoc) {
+        // PDF zoom logic
+        currentZoom = Math.max(currentZoom * 0.8, 0.5);
         applyZoom();
-    } else if (imageViewer.style.display !== 'none') {
-        imageViewer.style.transform = `scale(${currentZoom})`;
+    } else {
+        // Image zoom logic
+        currentZoom = Math.max(currentZoom * 0.8, 0.1);
+        applyImageZoom();
     }
 }
 
@@ -1707,6 +1709,12 @@ function showExtractedImage(image) {
     // Clear any previous content
     pdfContainer.innerHTML = '';
     
+    // Remove any existing navigation controls
+    const existingControls = imageContainer.querySelector('.image-nav-controls');
+    if (existingControls) {
+        existingControls.remove();
+    }
+    
     // Set file name in the viewer
     viewerFilename.textContent = image.filename;
     
@@ -1715,11 +1723,169 @@ function showExtractedImage(image) {
     btnNextPage.disabled = true;
     pageInfo.textContent = '';
     
+    // Reset zoom before loading new image
+    currentZoom = 1.0;
+    
+    // Create and add image navigation controls
+    const navControls = document.createElement('div');
+    navControls.className = 'image-nav-controls';
+    
+    const zoomInBtn = document.createElement('button');
+    zoomInBtn.innerHTML = '<i class="fas fa-search-plus"></i>';
+    zoomInBtn.title = 'Zoom in';
+    zoomInBtn.addEventListener('click', zoomIn);
+    
+    const zoomOutBtn = document.createElement('button');
+    zoomOutBtn.innerHTML = '<i class="fas fa-search-minus"></i>';
+    zoomOutBtn.title = 'Zoom out';
+    zoomOutBtn.addEventListener('click', zoomOut);
+    
+    const fitWidthBtn = document.createElement('button');
+    fitWidthBtn.innerHTML = '<i class="fas fa-arrows-alt-h"></i>';
+    fitWidthBtn.title = 'Fit to width';
+    fitWidthBtn.addEventListener('click', fitImageToWidth);
+    
+    const resetZoomBtn = document.createElement('button');
+    resetZoomBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+    resetZoomBtn.title = 'Reset view';
+    resetZoomBtn.addEventListener('click', resetImageZoom);
+    
+    const zoomLevel = document.createElement('span');
+    zoomLevel.className = 'zoom-level';
+    zoomLevel.textContent = '100%';
+    
+    // Add help text for Ctrl+wheel zoom
+    const zoomHelp = document.createElement('span');
+    zoomHelp.className = 'zoom-help';
+    zoomHelp.innerHTML = '<i class="fas fa-info-circle"></i> Ctrl+Molette pour zoomer';
+    
+    navControls.appendChild(zoomInBtn);
+    navControls.appendChild(zoomOutBtn);
+    navControls.appendChild(fitWidthBtn);
+    navControls.appendChild(resetZoomBtn);
+    navControls.appendChild(zoomLevel);
+    navControls.appendChild(zoomHelp);
+    
+    imageContainer.appendChild(navControls);
+    
     // Display the image
     imageViewer.src = image.url;
     imageViewer.style.display = 'block';
-    currentZoom = 1.0;
     imageViewer.style.transform = `scale(${currentZoom})`;
+    
+    // Check if this is a webtoon format image after it loads
+    imageViewer.onload = function() {
+        const aspectRatio = this.naturalWidth / this.naturalHeight;
+        
+        // If image is tall and narrow (typical webtoon format)
+        if (aspectRatio < 0.5) {
+            // Add webtoon format class
+            imageViewer.classList.add('webtoon-format');
+            
+            // Auto fit to width for better viewing
+            setTimeout(fitImageToWidth, 100);
+        } else {
+            imageViewer.classList.remove('webtoon-format');
+            resetImageZoom();
+        }
+        
+        // Update zoom level display
+        updateZoomLevelDisplay();
+        
+        // Show a toast notification about Ctrl+wheel zoom
+        showToast('Utilisez Ctrl+Molette pour zoomer, ou les boutons de contrôle', 'info');
+    };
+    
+    // Add wheel zoom functionality
+    imageContainer.onwheel = handleImageWheel;
+}
+
+// Fit image to width
+function fitImageToWidth() {
+    const containerWidth = imageContainer.clientWidth;
+    const imageWidth = imageViewer.naturalWidth;
+    
+    // Calculate zoom to fit width (with small margin)
+    currentZoom = (containerWidth * 0.95) / imageWidth;
+    
+    // Apply zoom
+    applyImageZoom();
+    
+    // Scroll to top
+    imageContainer.scrollTop = 0;
+}
+
+// Reset image zoom
+function resetImageZoom() {
+    currentZoom = 1.0;
+    applyImageZoom();
+    
+    // Center the image
+    imageContainer.scrollTop = 0;
+}
+
+// Apply image zoom
+function applyImageZoom() {
+    // Apply zoom transform
+    imageViewer.style.transform = `scale(${currentZoom})`;
+    
+    // Update zoom level display
+    updateZoomLevelDisplay();
+}
+
+// Update zoom level display
+function updateZoomLevelDisplay() {
+    const zoomLevelEl = imageContainer.querySelector('.zoom-level');
+    if (zoomLevelEl) {
+        zoomLevelEl.textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+}
+
+// Handle mouse wheel on image
+function handleImageWheel(e) {
+    // Only handle zoom if Ctrl key is pressed, otherwise allow normal scrolling
+    if (!e.ctrlKey) {
+        return; // Allow default scrolling behavior when Ctrl is not pressed
+    }
+    
+    // Prevent default scrolling when Ctrl is pressed
+    e.preventDefault();
+    
+    // Get mouse position relative to container
+    const rect = imageContainer.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    
+    // Get scroll position before zoom
+    const scrollXBefore = imageContainer.scrollLeft;
+    const scrollYBefore = imageContainer.scrollTop;
+    
+    // Calculate position on image
+    const imageX = scrollXBefore + mouseX;
+    const imageY = scrollYBefore + mouseY;
+    
+    // Calculate zoom change
+    const delta = -e.deltaY;
+    const zoomChange = delta > 0 ? 1.1 : 0.9;
+    
+    // Apply zoom
+    const oldZoom = currentZoom;
+    currentZoom *= zoomChange;
+    
+    // Limit zoom range
+    currentZoom = Math.max(0.1, Math.min(currentZoom, 5.0));
+    
+    // Apply zoom
+    applyImageZoom();
+    
+    // Calculate new scroll position to keep mouse point fixed
+    const zoomRatio = currentZoom / oldZoom;
+    const newScrollX = imageX * zoomRatio - mouseX;
+    const newScrollY = imageY * zoomRatio - mouseY;
+    
+    // Set new scroll position
+    imageContainer.scrollLeft = newScrollX;
+    imageContainer.scrollTop = newScrollY;
 }
 
 // Use extracted image (add a block with reference)
