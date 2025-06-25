@@ -11,8 +11,19 @@ import uuid
 import shutil
 import re
 import time
+import asyncio
+import aiohttp
+import aiofiles
+import mimetypes
+from firecrawl import AsyncFirecrawlApp
 from urllib.parse import urljoin, urlparse
 from werkzeug.utils import secure_filename
+
+# Clé API Firecrawl par défaut
+FIRECRAWL_API_KEY = 'fc-4e2ef9d083654a49ab17a5dc27888c03'
+
+# --- Serve .webp with correct MIME ---
+mimetypes.add_type('image/webp', '.webp')
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'webtoon-editor-secret-key'
@@ -34,7 +45,11 @@ DATA_FILE = 'data/project_data.json'
 def get_default_data():
     return {
         'blocks': [],
-        'blockTypes': ['HB', 'B', 'DB', 'C', 'HC']
+        'blockTypes': ['HB', 'B', 'DB', 'C', 'HC'],
+        'api_keys': {
+            'gemini': '',
+            'firecrawl': ''
+        }
     }
 
 # Load project data
@@ -66,8 +81,33 @@ def api_save():
     data = request.json
     if data is None:
         return jsonify({"error": "Invalid JSON"}), 400
-    save_data(data)
+    
+    current_data = load_data()
+    current_data['blocks'] = data.get('blocks', current_data['blocks'])
+    current_data['blockTypes'] = data.get('blockTypes', current_data['blockTypes'])
+    
+    save_data(current_data)
     return jsonify({"status": "success"})
+
+# ----------  API KEYS ----------
+@app.route('/api/get-keys')
+def get_keys():
+    return jsonify(load_data().get('api_keys', {}))
+
+@app.route('/api/set-keys', methods=['POST'])
+def set_keys():
+    incoming = request.json or {}
+    data = load_data()
+    
+    if 'api_keys' not in data:
+        data['api_keys'] = {'gemini': '', 'firecrawl': ''}
+        
+    data['api_keys'].update({
+        'gemini': incoming.get('gemini', data['api_keys'].get('gemini', '')),
+        'firecrawl': incoming.get('firecrawl', data['api_keys'].get('firecrawl', ''))
+    })
+    save_data(data)
+    return jsonify({"status": "ok"})
 
 @app.route('/api/extract-webtoon', methods=['POST'])
 def api_extract_webtoon():
@@ -100,6 +140,44 @@ def api_extract_webtoon():
         })
     except Exception as e:
         logging.error(f"Extraction error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/extract-firecrawl', methods=['POST'])
+def api_extract_firecrawl():
+    """Extract images from a webtoon URL using Firecrawl"""
+    data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    url = data.get('url', '')
+    api_key = data.get('api_key') or load_data().get('api_keys', {}).get('firecrawl', '')
+    
+    if not url:
+        return jsonify({"error": "URL is required"}), 400
+    
+    if not api_key:
+        return jsonify({"error": "Firecrawl API key missing"}), 400
+    
+    try:
+        # Create a folder for this extraction
+        extraction_id = str(uuid.uuid4())[:8]
+        extraction_folder = os.path.join(app.config['UPLOAD_FOLDER'], f'webtoon_{extraction_id}')
+        os.makedirs(extraction_folder, exist_ok=True)
+        
+        # Run the async extraction in a synchronous context
+        images = asyncio.run(extract_firecrawl_images(url, api_key, extraction_folder))
+        
+        if not images:
+            return jsonify({"error": "No images found or could not access the website"}), 404
+        
+        # Return image URLs and info
+        return jsonify({
+            "status": "success",
+            "extraction_id": extraction_id,
+            "images": images
+        })
+    except Exception as e:
+        logging.error(f"Firecrawl extraction error: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 def extract_webtoon_images(url, save_folder):
@@ -199,6 +277,137 @@ def extract_webtoon_images(url, save_folder):
         
     except Exception as e:
         logging.error(f"Error extracting images from {url}: {str(e)}")
+        raise e
+
+async def extract_firecrawl_images(url, api_key, save_folder):
+    """Extract images from a webtoon URL using Firecrawl and save them to the specified folder"""
+    logging.info(f"Starting Firecrawl extraction from {url}")
+    
+    try:
+        # Initialize Firecrawl
+        app = AsyncFirecrawlApp(api_key=api_key)
+        
+        # Scrape the URL to get image URLs via JSON extraction
+        logging.info("Launching page scraping...")
+        # Using a simple dict for json_options which firecrawl should handle internally
+        scrape_response = await app.scrape_url(
+            url=url,
+            formats=['json'],
+            json_options={
+                'prompt': 'Extract all the chapter page image URLs from this manga page. Look for images with alt text like "chapter page 1", "chapter page 2", etc. Return them as a list of URLs.'
+            }
+        )
+        
+        # Check if we got a valid response
+        if not scrape_response or not hasattr(scrape_response, 'json') or not scrape_response.json:
+            logging.error("Error: Could not retrieve JSON content.")
+            logging.error(f"Response received: {scrape_response}")
+            return []
+
+        json_content = scrape_response.json
+        logging.info("Scraping completed. Analyzing JSON content...")
+        logging.info(f"JSON content received: {json_content}")
+        
+        # Extract image URLs from the JSON response
+        image_urls = []
+        
+        # The AI might return URLs in 'chapterPageImageUrls'
+        if isinstance(json_content, dict) and 'chapterPageImageUrls' in json_content:
+            image_urls = json_content['chapterPageImageUrls']
+        else:
+            # Fallback: search all values in the dictionary
+            if isinstance(json_content, dict):
+                for key, value in json_content.items():
+                    if isinstance(value, list):
+                        # If it's a list, add all items that look like URLs
+                        for item in value:
+                            if isinstance(item, str) and 'http' in item:
+                                image_urls.append(item)
+                    elif isinstance(value, str) and 'http' in value:
+                        image_urls.append(value)
+            elif isinstance(json_content, list):
+                # If it's directly a list of URLs
+                for item in json_content:
+                    if isinstance(item, str) and 'http' in item:
+                        image_urls.append(item)
+        
+        if not image_urls:
+            logging.error("No chapter images found in the JSON response.")
+            return []
+            
+        logging.info(f"Found {len(image_urls)} chapter images.")
+
+        # Download all images in parallel
+        images = []
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            for i, img_url in enumerate(image_urls):
+                # Determine file extension from URL
+                file_ext = os.path.splitext(img_url)[1]
+                if not file_ext:  # If no extension, use .jpg as default
+                    file_ext = '.jpg'
+                
+                # Create filename with proper numbering
+                img_filename = f'image_{i+1:03d}{file_ext}'
+                img_path = os.path.join(save_folder, img_filename)
+                
+                # Create task for downloading the image
+                task = download_image(session, img_url, img_path, i)
+                tasks.append(task)
+            
+            # Wait for all download tasks to complete
+            download_results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            # Process download results
+            for i, result in enumerate(download_results):
+                if isinstance(result, Exception):
+                    logging.error(f"Error downloading image {i+1}: {str(result)}")
+                    continue
+                
+                # Skip None results (failed downloads)
+                if result is None:
+                    continue
+                
+                # Process successful downloads
+                img_filename = result.get('filename')
+                img_path = result.get('path')
+                
+                if img_filename and img_path:
+                    # Create URL for the saved image
+                    img_url_path = url_for('static', filename=f'uploads/webtoon_{os.path.basename(save_folder)}/{img_filename}')
+                    
+                    images.append({
+                        'filename': img_filename,
+                        'url': img_url_path,
+                        'path': img_path
+                    })
+        
+        return images
+        
+    except Exception as e:
+        logging.error(f"Error extracting images with Firecrawl from {url}: {str(e)}")
+        raise e
+
+async def download_image(session, url, filepath, index):
+    """Download an image from a URL and save it to a file"""
+    try:
+        async with session.get(url) as response:
+            if response.status == 200:
+                # Open the file in binary write mode
+                async with aiofiles.open(filepath, mode='wb') as f:
+                    await f.write(await response.read())
+                
+                logging.info(f"Successfully downloaded: {filepath}")
+                return {
+                    'filename': os.path.basename(filepath),
+                    'path': filepath,
+                    'index': index
+                }
+            else:
+                logging.error(f"Error {response.status} for URL: {url}")
+                return None
+    except Exception as e:
+        logging.error(f"Failed to download {url}: {str(e)}")
         raise e
 
 @app.route('/api/upload', methods=['POST'])

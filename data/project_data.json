@@ -2,9 +2,15 @@
   "blocks": [
     {
       "comment": "",
-      "content": "Il faut faire des efforts.",
+      "content": "",
       "number": 1,
-      "type": "HB"
+      "type": "DB"
+    },
+    {
+      "type": "HC",
+      "number": 1,
+      "content": "[Image: image_012.webp]",
+      "comment": ""
     }
   ],
   "blockTypes": [
@@ -13,5 +19,9 @@
     "DB",
     "C",
     "HC"
-  ]
+  ],
+  "api_keys": {
+    "gemini": "AIzaSyD3cpynpKcO9b-WZ4iO3MpBIQhUkrxa72M",
+    "firecrawl": "fc-4e2ef9d083654a49ab17a5dc27888c03"
+  }
 }

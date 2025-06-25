@@ -5,7 +5,8 @@ let customTypes = [];
 let history = [];
 let aiMap = {};
 let theme = localStorage.getItem('wtoon-theme') || 'light';
-let geminiKey = localStorage.getItem('geminiKey') || '';
+let geminiKey = '';
+let firecrawlKey = '';
 let themeClickCount = 0;
 let themeClickTimer = null;
 let currentPDF = null;
@@ -22,6 +23,7 @@ const projectSidebar = document.getElementById('project-sidebar');
 const toolsSidebar = document.getElementById('tools-sidebar');
 const fileImport = document.getElementById('file-import');
 const geminiKeyInput = document.getElementById('gemini-key');
+const toggleGeminiKey = document.getElementById('toggle-gemini-key');
 const blockTemplate = document.getElementById('block-template');
 const spellcheckResult = document.getElementById('spellcheck-result');
 const viewerPanel = document.getElementById('viewer-panel');
@@ -41,6 +43,9 @@ const fileUploadImage = document.getElementById('file-upload-image');
 const fileUploadPDF = document.getElementById('file-upload-pdf');
 const webtoonUrlInput = document.getElementById('webtoon-url');
 const btnExtractWebtoon = document.getElementById('btn-extract-webtoon');
+const btnExtractFirecrawl = document.getElementById('btn-extract-firecrawl');
+const firecrawlKeyInput = document.getElementById('firecrawl-key');
+const toggleFirecrawlKey = document.getElementById('toggle-firecrawl-key');
 const extractionStatus = document.getElementById('extraction-status');
 const extractionProgress = document.getElementById('extraction-progress');
 const extractedImagesContainer = document.getElementById('extracted-images-container');
@@ -49,7 +54,6 @@ const extractedImageTemplate = document.getElementById('extracted-image-template
 // Initialize app
 function init() {
     setTheme(theme);
-    geminiKeyInput.value = geminiKey;
     
     // Ensure project sidebar is hidden by default
     projectSidebar.setAttribute('data-visible', 'false');
@@ -72,6 +76,9 @@ function init() {
     
     // Load data after UI is set up
     loadData();
+    
+    // Load API keys from server
+    loadApiKeys();
     
     // Animate entry
     setTimeout(() => {
@@ -140,6 +147,9 @@ function setupEventListeners() {
     // Gemini key handler
     geminiKeyInput.addEventListener('change', updateGeminiKey);
     
+    // Firecrawl key handler
+    firecrawlKeyInput.addEventListener('change', updateFirecrawlKey);
+    
     // Add shortcuts
     document.addEventListener('keydown', handleKeyboardShortcuts);
 
@@ -161,6 +171,25 @@ function setupEventListeners() {
 
     // Webtoon extraction
     btnExtractWebtoon.addEventListener('click', extractWebtoon);
+    btnExtractFirecrawl.addEventListener('click', extractFirecrawl);
+    
+    // Toggle Firecrawl API key visibility
+    toggleFirecrawlKey.addEventListener('click', () => {
+        const isVisible = firecrawlKeyInput.type === 'text';
+        firecrawlKeyInput.type = isVisible ? 'password' : 'text';
+        toggleFirecrawlKey.innerHTML = isVisible ? 
+            '<i class="fas fa-eye-slash"></i>' : 
+            '<i class="fas fa-eye"></i>';
+    });
+    
+    // Toggle Gemini key visibility
+    toggleGeminiKey.addEventListener('click', () => {
+        const isVisible = geminiKeyInput.type === 'text';
+        geminiKeyInput.type = isVisible ? 'password' : 'text';
+        toggleGeminiKey.innerHTML = isVisible ? 
+            '<i class="fas fa-eye-slash"></i>' : 
+            '<i class="fas fa-eye"></i>';
+    });
 }
 
 // Handle keyboard shortcuts
@@ -1303,7 +1332,13 @@ function setTheme(newTheme) {
 function updateGeminiKey() {
     geminiKey = geminiKeyInput.value;
     localStorage.setItem('geminiKey', geminiKey);
-    showToast('Clé Gemini sauvegardée', 'success');
+    saveApiKeys(geminiKey, firecrawlKey);
+}
+
+// Update Firecrawl key
+function updateFirecrawlKey() {
+    firecrawlKey = firecrawlKeyInput.value;
+    saveApiKeys(geminiKey, firecrawlKey);
 }
 
 // Update block count
@@ -1484,6 +1519,7 @@ async function extractWebtoon() {
     
     // Show loading state
     btnExtractWebtoon.disabled = true;
+    btnExtractFirecrawl.disabled = true;
     extractionStatus.textContent = 'Extraction en cours...';
     extractionStatus.className = 'status-message';
     extractionProgress.classList.add('active');
@@ -1539,6 +1575,97 @@ async function extractWebtoon() {
         }, 1000);
         
         btnExtractWebtoon.disabled = false;
+        btnExtractFirecrawl.disabled = false;
+        showLoading(false);
+    }
+}
+
+// Extract webtoon using Firecrawl
+async function extractFirecrawl() {
+    let url = webtoonUrlInput.value.trim();
+    if (!url) {
+        showToast('Veuillez entrer une URL valide', 'error');
+        return;
+    }
+    
+    // Check if URL is valid
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+    }
+    
+    // Remove @ symbol if present (common when copying URLs)
+    if (url.startsWith('@http')) {
+        url = url.substring(1);
+    }
+    
+    // Update the input field with the cleaned URL
+    webtoonUrlInput.value = url;
+    
+    // Show loading state
+    showToast('Extraction Firecrawl démarrée...', 'info');
+    showLoading(true);
+    btnExtractWebtoon.disabled = true;
+    btnExtractFirecrawl.disabled = true;
+    extractionStatus.textContent = 'Extraction Firecrawl en cours...';
+    extractionStatus.className = 'status-message';
+    extractionProgress.classList.add('active');
+    extractionProgress.querySelector('.progress-bar').style.width = '10%';
+    extractedImagesContainer.innerHTML = '';
+    
+    try {
+        // Call the API to extract images using Firecrawl
+        const response = await fetch('/api/extract-firecrawl', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                url, 
+                api_key: firecrawlKey || undefined  // Only send if provided
+            })
+        });
+        
+        // Update progress
+        extractionProgress.querySelector('.progress-bar').style.width = '50%';
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur lors de l\'extraction avec Firecrawl');
+        }
+        
+        const data = await response.json();
+        
+        // Update progress
+        extractionProgress.querySelector('.progress-bar').style.width = '80%';
+        
+        if (data.images && data.images.length > 0) {
+            // Display extracted images
+            displayExtractedImages(data.images);
+            
+            extractionStatus.textContent = `${data.images.length} images extraites avec succès via Firecrawl`;
+            extractionStatus.className = 'status-message success';
+            
+            // Open project sidebar if it's not already open
+            if (projectSidebar.getAttribute('data-visible') === 'false') {
+                projectSidebar.setAttribute('data-visible', 'true');
+            }
+        } else {
+            extractionStatus.textContent = 'Aucune image trouvée via Firecrawl';
+            extractionStatus.className = 'status-message error';
+        }
+    } catch (error) {
+        console.error('Firecrawl extraction error:', error);
+        extractionStatus.textContent = `Erreur Firecrawl: ${error.message}`;
+        extractionStatus.className = 'status-message error';
+    } finally {
+        // Complete progress bar
+        extractionProgress.querySelector('.progress-bar').style.width = '100%';
+        setTimeout(() => {
+            extractionProgress.classList.remove('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '0';
+        }, 1000);
+        
+        btnExtractWebtoon.disabled = false;
+        btnExtractFirecrawl.disabled = false;
+        showLoading(false);
     }
 }
 
@@ -1597,27 +1724,45 @@ function showExtractedImage(image) {
 
 // Use extracted image (add a block with reference)
 function useExtractedImage(image) {
-    // Create a new block
-    const blockType = 'HC'; // Use HC block type for images
-    addBlock(blockType);
-    
-    // Get the last added block
-    const lastBlock = blocks[blocks.length - 1];
-    
-    // Add image reference to the block content
-    const imageFilename = image.filename;
-    const imageUrl = image.url;
-    lastBlock.content = `[Image: ${imageFilename}]`;
-    lastBlock.comment = `Image URL: ${imageUrl}`;
-    
-    // Render blocks to update the UI
-    renderBlocks();
-    
-    // Save changes
-    saveData();
+    // Show the image in the viewer panel instead of creating a block
+    showExtractedImage(image);
     
     // Show toast
-    showToast('Image ajoutée comme bloc HC');
+    showToast('Image ouverte dans la fenêtre d\'affichage');
+}
+
+// Load API keys from server
+async function loadApiKeys() {
+    try {
+        const response = await fetch('/api/get-keys');
+        const keys = await response.json();
+        
+        // Update keys in memory
+        geminiKey = keys.gemini || '';
+        firecrawlKey = keys.firecrawl || '';
+        
+        // Update UI
+        geminiKeyInput.value = geminiKey;
+        firecrawlKeyInput.value = firecrawlKey;
+    } catch (error) {
+        console.error('Error loading API keys:', error);
+    }
+}
+
+// Save API keys to server
+async function saveApiKeys(gemini, firecrawl) {
+    try {
+        await fetch('/api/set-keys', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                gemini: gemini,
+                firecrawl: firecrawl
+            })
+        });
+    } catch (error) {
+        console.error('Error saving API keys:', error);
+    }
 }
 
 // Initialize app when DOM is loaded
