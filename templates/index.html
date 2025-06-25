@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <!-- JSZip pour la gestion des archives -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- PDF.js -->
+    <script src="{{ url_for('static', filename='js/lib/pdf.min.js') }}"></script>
 </head>
 <body>
     <div class="app">
@@ -40,22 +44,22 @@
                 <input id="file-upload-pdf" type="file" accept=".pdf" style="display: none;">
             </div>
             <hr>
-            <h4><i class="fas fa-globe"></i> Extraction Webtoon</h4>
+            <h4><i class="fas fa-spider"></i> Extraction de webtoons</h4>
             <div class="webtoon-extractor">
                 <div class="input-wrapper">
                     <input type="text" id="webtoon-url" placeholder="URL du webtoon à extraire">
+                    <span class="input-icon"><i class="fas fa-link"></i></span>
                 </div>
                 <div class="button-group">
-                    <button id="btn-extract-webtoon" class="btn-primary"><i class="fas fa-download"></i> Extraire (Regex)</button>
+                    <button id="btn-extract-webtoon" class="btn-primary"><i class="fas fa-download"></i> Extraire</button>
                     <button id="btn-extract-firecrawl" class="btn-primary"><i class="fas fa-fire"></i> Extraire (Firecrawl)</button>
+                    <button id="btn-cleanup-uploads" class="btn-warning"><i class="fas fa-broom"></i> Nettoyer uploads</button>
                 </div>
-                <div id="extraction-status" class="status-message"></div>
                 <div id="extraction-progress" class="progress-bar-container">
                     <div class="progress-bar"></div>
                 </div>
-                <div id="extracted-images-container" class="extracted-images">
-                    <!-- Les images extraites seront affichées ici -->
-                </div>
+                <div id="extraction-status" class="status-message">Prêt à extraire</div>
+                <div id="extracted-images-container" class="extracted-images"></div>
             </div>
         </aside>
 
@@ -174,7 +178,6 @@
         </div>
     </template>
 
-    <script src="{{ url_for('static', filename='js/lib/pdf.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

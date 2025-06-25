@@ -2,7 +2,7 @@
   "blocks": [
     {
       "comment": "",
-      "content": "",
+      "content": "Ed rothotaylorrrrrrr",
       "number": 1,
       "type": "DB"
     },
@@ -11,6 +11,12 @@
       "content": "aaaaaaaaaaaaaaaaaaaaa",
       "number": 1,
       "type": "HC"
+    },
+    {
+      "comment": "",
+      "content": "Qu'en dit la CA ?",
+      "number": 1,
+      "type": "ADOLF"
     }
   ],
   "blockTypes": [
@@ -18,7 +24,8 @@
     "B",
     "DB",
     "C",
-    "HC"
+    "HC",
+    "ADOLF"
   ],
   "api_keys": {
     "gemini": "AIzaSyD3cpynpKcO9b-WZ4iO3MpBIQhUkrxa72M",

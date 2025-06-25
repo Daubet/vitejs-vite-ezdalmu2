@@ -535,11 +535,68 @@ def api_upload():
 
 @app.route('/api/cleanup', methods=['POST'])
 def api_cleanup():
-    """Cleanup unused uploads to free space"""
+    """Cleanup uploads folder to keep only the most recent webtoon folder"""
     try:
-        # Could implement a strategy to remove old files
-        # For now, just return success
-        return jsonify({"status": "success", "message": "Cleanup completed"})
+        # Get uploads folder
+        uploads_dir = app.config['UPLOAD_FOLDER']
+        
+        # Count files and directories before cleanup
+        total_dirs_before = 0
+        total_files_before = 0
+        
+        for root, dirs, files in os.walk(uploads_dir):
+            total_dirs_before += len(dirs)
+            total_files_before += len(files)
+        
+        # Get all webtoon directories
+        webtoon_dirs = [d for d in os.listdir(uploads_dir) if d.startswith('webtoon_') and os.path.isdir(os.path.join(uploads_dir, d))]
+        
+        # Sort by modification time (newest first)
+        webtoon_dirs.sort(key=lambda x: os.path.getmtime(os.path.join(uploads_dir, x)), reverse=True)
+        
+        # Keep only the most recent directory
+        keep_folder = webtoon_dirs[0] if webtoon_dirs else None
+        
+        # Delete all other webtoon folders
+        deleted_dirs = 0
+        deleted_files = 0
+        
+        for item in os.listdir(uploads_dir):
+            item_path = os.path.join(uploads_dir, item)
+            
+            # Only process webtoon directories
+            if item.startswith('webtoon_') and os.path.isdir(item_path):
+                if keep_folder and item == keep_folder:
+                    # Skip the most recent folder
+                    continue
+                
+                # Count files in this directory
+                file_count = sum(len(files) for _, _, files in os.walk(item_path))
+                deleted_files += file_count
+                deleted_dirs += 1
+                
+                # Delete the directory
+                shutil.rmtree(item_path)
+                logging.info(f"Deleted directory: {item}")
+        
+        # Count files and directories after cleanup
+        total_dirs_after = 0
+        total_files_after = 0
+        
+        for root, dirs, files in os.walk(uploads_dir):
+            total_dirs_after += len(dirs)
+            total_files_after += len(files)
+        
+        # Return cleanup statistics
+        return jsonify({
+            "status": "success", 
+            "message": f"Nettoyage terminé. {deleted_dirs} dossiers et {deleted_files} fichiers supprimés.",
+            "stats": {
+                "before": {"directories": total_dirs_before, "files": total_files_before},
+                "after": {"directories": total_dirs_after, "files": total_files_after},
+                "deleted": {"directories": deleted_dirs, "files": deleted_files}
+            }
+        })
     except Exception as e:
         logging.error(f"Cleanup error: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -663,6 +720,71 @@ def export_docx():
         download_name='script_webtoon.docx',
         mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     )
+
+@app.route('/api/create-folder', methods=['POST'])
+def api_create_folder():
+    """Create a folder in the uploads directory"""
+    try:
+        data = request.json
+        if not data or 'folderName' not in data:
+            return jsonify({"error": "Folder name is required"}), 400
+        
+        folder_name = secure_filename(data['folderName'])
+        folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
+        
+        # Create folder if it doesn't exist
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            logging.info(f"Created folder: {folder_path}")
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Folder {folder_name} created successfully",
+            "path": folder_path
+        })
+    except Exception as e:
+        logging.error(f"Error creating folder: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/upload-to-folder', methods=['POST'])
+def api_upload_to_folder():
+    """Upload a file to a specific folder in uploads directory"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    target_folder = request.form.get('targetFolder', '')
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+        
+    if file and file.filename:
+        # Secure the filename
+        filename = secure_filename(file.filename)
+        
+        # Ensure target folder exists and is within uploads directory
+        target_folder = secure_filename(target_folder)
+        folder_path = os.path.join(app.config['UPLOAD_FOLDER'], target_folder)
+        
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+            logging.info(f"Created folder: {folder_path}")
+        
+        # Save the file to the target folder
+        file_path = os.path.join(folder_path, filename)
+        file.save(file_path)
+        
+        # Return the path to access the file
+        file_url = url_for('serve_upload', fname=f'{target_folder}/{filename}')
+        
+        return jsonify({
+            "status": "success",
+            "filename": filename,
+            "path": file_path,
+            "url": file_url
+        })
+    
+    return jsonify({"error": "Failed to upload file"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

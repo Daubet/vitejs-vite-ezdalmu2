@@ -172,6 +172,7 @@ function setupEventListeners() {
     // Webtoon extraction
     btnExtractWebtoon.addEventListener('click', extractWebtoon);
     btnExtractFirecrawl.addEventListener('click', extractFirecrawl);
+    document.getElementById('btn-cleanup-uploads').addEventListener('click', cleanupUploads);
     
     // Toggle Firecrawl API key visibility
     toggleFirecrawlKey.addEventListener('click', () => {
@@ -980,51 +981,408 @@ function undo() {
 }
 
 // Export project
-function exportProject() {
-    const data = JSON.stringify({ blocks, blockTypes }, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'project.wtoon';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    showToast('Projet exporté avec succès', 'success');
+async function exportProject() {
+    try {
+        showLoading(true);
+        
+        // Create a new JSZip instance
+        const zip = new JSZip();
+        
+        // Collect all image references from blocks
+        const imageReferences = new Set();
+        blocks.forEach(block => {
+            // Look for image references in block content
+            const content = block.content || '';
+            
+            // Match different image reference formats
+            // 1. Standard src="..." pattern
+            const srcMatches = content.match(/src=["']([^"']+)["']/g) || [];
+            srcMatches.forEach(match => {
+                const src = match.replace(/src=["']/, '').replace(/["']$/, '');
+                if (src.includes('/uploads/')) {
+                    imageReferences.add(src);
+                }
+            });
+            
+            // 2. URL pattern without src attribute (sometimes found in markdown or text)
+            const urlMatches = content.match(/https?:\/\/[^/]+\/uploads\/[^\s"')>]+/g) || [];
+            urlMatches.forEach(url => {
+                imageReferences.add(url);
+            });
+            
+            // 3. Relative path pattern
+            const relativeMatches = content.match(/\/uploads\/[^\s"')>]+/g) || [];
+            relativeMatches.forEach(path => {
+                imageReferences.add(path);
+            });
+        });
+        
+        console.log(`Found ${imageReferences.size} image references to include in archive`);
+        
+        // Create a map to store the mapping between original paths and archive paths
+        const pathMapping = {};
+        
+        // Process each image reference
+        let imageCount = 0;
+        for (const src of imageReferences) {
+            try {
+                // Extract the relative path from the URL
+                let relativePath;
+                if (src.startsWith('http')) {
+                    const urlPath = new URL(src).pathname;
+                    relativePath = urlPath.startsWith('/') ? urlPath.substring(1) : urlPath;
+                } else {
+                    relativePath = src.startsWith('/') ? src.substring(1) : src;
+                }
+                
+                // Skip if we already processed this path
+                if (pathMapping[relativePath]) continue;
+                
+                // Construct the full URL if needed
+                const fullUrl = src.startsWith('http') ? src : window.location.origin + (src.startsWith('/') ? src : '/' + src);
+                
+                console.log(`Processing image: ${fullUrl} (${relativePath})`);
+                
+                // Fetch the image
+                const response = await fetch(fullUrl);
+                if (!response.ok) {
+                    console.error(`Failed to fetch image ${fullUrl}: ${response.status} ${response.statusText}`);
+                    continue;
+                }
+                
+                const blob = await response.blob();
+                
+                // Extract filename and create archive path
+                const filename = relativePath.split('/').pop();
+                const archivePath = `images/${filename}`;
+                
+                // Add to zip
+                zip.file(archivePath, blob);
+                
+                // Store mapping
+                pathMapping[relativePath] = archivePath;
+                imageCount++;
+                
+                console.log(`Added image to archive: ${archivePath}`);
+            } catch (error) {
+                console.error(`Failed to process image ${src}:`, error);
+            }
+        }
+        
+        // Update the references in the blocks to point to the archive paths
+        const blocksForExport = JSON.parse(JSON.stringify(blocks));
+        blocksForExport.forEach(block => {
+            if (block.content) {
+                let content = block.content;
+                
+                // Replace all references with archive paths
+                for (const [originalPath, archivePath] of Object.entries(pathMapping)) {
+                    // Replace full URLs
+                    content = content.replace(
+                        new RegExp(`https?://[^/]+/${originalPath}`, 'g'),
+                        archivePath
+                    );
+                    
+                    // Replace relative URLs
+                    content = content.replace(
+                        new RegExp(`/${originalPath}`, 'g'),
+                        archivePath
+                    );
+                }
+                
+                block.content = content;
+            }
+        });
+        
+        // Create the project data
+        const projectData = {
+            blocks: blocksForExport,
+            blockTypes,
+            exportVersion: "2.0",
+            exportDate: new Date().toISOString()
+        };
+        
+        // Add the project data to the zip
+        zip.file("project.json", JSON.stringify(projectData, null, 2));
+        
+        // Generate the zip file
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        
+        // Create and download the file
+        const url = URL.createObjectURL(zipBlob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'project.wtoon';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
+        showToast(`Projet exporté avec succès (${imageCount} images incluses)`, 'success');
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast('Erreur lors de l\'exportation', 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
 // Import project
-function importProject(e) {
+async function importProject(e) {
     const file = e.target.files[0];
     if (!file) return;
     
     showLoading(true);
-    const reader = new FileReader();
     
-    reader.onload = function(event) {
-        try {
-            const data = JSON.parse(event.target.result);
-            blocks = data.blocks;
-            blockTypes = data.blockTypes;
-            history = [];
-            aiMap = {};
-            saveData();
-            renderBlocks();
-            renderBlockTypeButtons();
-            updateBlockCount();
-            document.getElementById('btn-undo').disabled = true;
-            showLoading(false);
-            showToast('Projet importé avec succès', 'success');
-        } catch (error) {
-            showLoading(false);
-            showToast('Fichier invalide', 'error');
+    try {
+        // Check if it's a ZIP file (new format) or JSON file (old format)
+        const isZip = file.type === 'application/zip' || 
+                     file.type === 'application/x-zip-compressed' || 
+                     file.name.toLowerCase().endsWith('.wtoon');
+        
+        if (isZip) {
+            // Handle ZIP format (new format)
+            await importZipProject(file);
+        } else {
+            // Handle JSON format (old format)
+            await importJsonProject(file);
         }
-    };
+        
+        showToast('Projet importé avec succès', 'success');
+    } catch (error) {
+        console.error('Import error:', error);
+        showToast('Fichier invalide ou erreur d\'importation', 'error');
+    } finally {
+        showLoading(false);
+        fileImport.value = null; // Reset file input
+    }
+}
+
+// Import project from ZIP format
+async function importZipProject(file) {
+    // Load JSZip
+    const zip = new JSZip();
     
-    reader.readAsText(file);
-    fileImport.value = null; // Reset file input
+    // Load the zip file
+    const zipData = await zip.loadAsync(file);
+    
+    // Read the project.json file
+    const projectJsonFile = zipData.file("project.json");
+    if (!projectJsonFile) {
+        throw new Error("Format de fichier invalide : project.json introuvable");
+    }
+    
+    // Parse the project data
+    const projectJson = await projectJsonFile.async("string");
+    const projectData = JSON.parse(projectJson);
+    
+    // Extract blocks and blockTypes
+    blocks = projectData.blocks || [];
+    blockTypes = projectData.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
+    
+    // Create a unique folder for this import
+    const importId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+    const importFolder = `webtoon_${importId}`;
+    
+    // Create the folder on the server
+    await fetch('/api/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderName: importFolder })
+    });
+    
+    // Extract and upload all image files
+    const imageFiles = [];
+    const imageMapping = {};
+    
+    // Process all files in the images/ directory
+    for (const [path, file] of Object.entries(zipData.files)) {
+        if (path.startsWith('images/') && !file.dir) {
+            try {
+                // Get the file data
+                const blob = await file.async("blob");
+                
+                // Extract filename
+                const filename = path.split('/').pop();
+                
+                // Create form data
+                const formData = new FormData();
+                formData.append('file', blob, filename);
+                formData.append('targetFolder', importFolder);
+                
+                // Upload to server
+                const uploadResponse = await fetch('/api/upload-to-folder', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const uploadData = await uploadResponse.json();
+                
+                // Store the mapping from archive path to new URL
+                imageMapping[path] = uploadData.url;
+                
+                // Add to imported images array for display
+                imageFiles.push({
+                    filename: filename,
+                    url: uploadData.url,
+                    path: uploadData.path
+                });
+                
+                console.log(`Imported image: ${path} -> ${uploadData.url}`);
+            } catch (error) {
+                console.error(`Failed to process image ${path}:`, error);
+            }
+        }
+    }
+    
+    // Update references in blocks
+    blocks.forEach(block => {
+        if (block.content) {
+            let content = block.content;
+            
+            // Replace all archive paths with new URLs
+            for (const [archivePath, newUrl] of Object.entries(imageMapping)) {
+                content = content.replaceAll(archivePath, newUrl);
+            }
+            
+            block.content = content;
+        }
+    });
+    
+    // Display imported images in the extracted images container
+    if (imageFiles.length > 0) {
+        // Update extraction status
+        extractionStatus.textContent = `${imageFiles.length} images importées avec succès`;
+        extractionStatus.className = 'status-message success';
+        
+        // Display the images
+        displayExtractedImages(imageFiles);
+        
+        // Open project sidebar to show the images
+        projectSidebar.setAttribute('data-visible', 'true');
+        
+        // Show toast
+        showToast(`${imageFiles.length} images restaurées depuis le fichier importé`, 'success');
+    }
+    
+    // Reset history and save
+    history = [];
+    aiMap = {};
+    saveData();
+    renderBlocks();
+    renderBlockTypeButtons();
+    updateBlockCount();
+    document.getElementById('btn-undo').disabled = true;
+}
+
+// Import project from JSON format (legacy)
+async function importJsonProject(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        
+        reader.onload = async function(event) {
+            try {
+                const data = JSON.parse(event.target.result);
+                blocks = data.blocks || [];
+                blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
+                
+                // Process embedded images if they exist
+                if (data.embeddedImages && Object.keys(data.embeddedImages).length > 0) {
+                    // Create a unique folder for this import
+                    const importId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+                    const importFolder = `webtoon_${importId}`;
+                    
+                    // Create the folder on the server
+                    await fetch('/api/create-folder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ folderName: importFolder })
+                    });
+                    
+                    // Prepare array to collect imported images for display
+                    const importedImages = [];
+                    
+                    // Upload each embedded image
+                    for (const [path, base64] of Object.entries(data.embeddedImages)) {
+                        try {
+                            // Extract filename from path
+                            const filename = path.split('/').pop();
+                            
+                            // Convert base64 to blob
+                            const fetchResponse = await fetch(base64);
+                            const blob = await fetchResponse.blob();
+                            
+                            // Create form data
+                            const formData = new FormData();
+                            formData.append('file', blob, filename);
+                            formData.append('targetFolder', importFolder);
+                            
+                            // Upload to server
+                            const uploadResponse = await fetch('/api/upload-to-folder', {
+                                method: 'POST',
+                                body: formData
+                            });
+                            
+                            const uploadData = await uploadResponse.json();
+                            
+                            // Add to imported images array
+                            importedImages.push({
+                                filename: filename,
+                                url: uploadData.url,
+                                path: uploadData.path
+                            });
+                            
+                            // Update references in blocks
+                            blocks.forEach(block => {
+                                if (block.content) {
+                                    block.content = block.content.replaceAll(
+                                        path, 
+                                        uploadData.url
+                                    );
+                                }
+                            });
+                        } catch (error) {
+                            console.error(`Failed to process embedded image ${path}:`, error);
+                        }
+                    }
+                    
+                    // Display imported images in the extracted images container
+                    if (importedImages.length > 0) {
+                        // Update extraction status
+                        extractionStatus.textContent = `${importedImages.length} images importées avec succès`;
+                        extractionStatus.className = 'status-message success';
+                        
+                        // Display the images
+                        displayExtractedImages(importedImages);
+                        
+                        // Open project sidebar to show the images
+                        projectSidebar.setAttribute('data-visible', 'true');
+                        
+                        // Show toast
+                        showToast(`${importedImages.length} images restaurées depuis le fichier importé`, 'success');
+                    }
+                }
+                
+                history = [];
+                aiMap = {};
+                saveData();
+                renderBlocks();
+                renderBlockTypeButtons();
+                updateBlockCount();
+                document.getElementById('btn-undo').disabled = true;
+                
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+        };
+        
+        reader.onerror = function() {
+            reject(new Error('Erreur de lecture du fichier'));
+        };
+        
+        reader.readAsText(file);
+    });
 }
 
 // Reset all
@@ -1995,6 +2353,64 @@ async function saveApiKeys(gemini, firecrawl) {
         });
     } catch (error) {
         console.error('Error saving API keys:', error);
+    }
+}
+
+// Cleanup uploads
+async function cleanupUploads() {
+    // Confirm before cleaning up
+    if (!confirm('Êtes-vous sûr de vouloir nettoyer le dossier uploads ?\n\nCela supprimera tous les dossiers de webtoons sauf le plus récent.\nLes images utilisées dans votre projet sont sauvegardées lors de l\'exportation.')) {
+        return;
+    }
+    
+    // Show loading
+    showLoading(true);
+    extractionStatus.textContent = 'Nettoyage en cours...';
+    extractionStatus.className = 'status-message';
+    extractionProgress.classList.add('active');
+    extractionProgress.querySelector('.progress-bar').style.width = '50%';
+    
+    try {
+        // Call the cleanup API
+        const response = await fetch('/api/cleanup', {
+            method: 'POST'
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur lors du nettoyage');
+        }
+        
+        const data = await response.json();
+        
+        // Update progress
+        extractionProgress.querySelector('.progress-bar').style.width = '100%';
+        
+        // Show success message
+        extractionStatus.textContent = data.message;
+        extractionStatus.className = 'status-message success';
+        
+        // Show detailed statistics in a toast
+        const stats = data.stats;
+        const detailedMessage = `
+            Avant: ${stats.before.directories} dossiers, ${stats.before.files} fichiers
+            Après: ${stats.after.directories} dossiers, ${stats.after.files} fichiers
+            Espace libéré: ${stats.deleted.directories} dossiers, ${stats.deleted.files} fichiers
+        `;
+        
+        showToast(detailedMessage, 'success');
+    } catch (error) {
+        console.error('Cleanup error:', error);
+        extractionStatus.textContent = `Erreur: ${error.message}`;
+        extractionStatus.className = 'status-message error';
+        showToast('Erreur lors du nettoyage des uploads', 'error');
+    } finally {
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            extractionProgress.classList.remove('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '0';
+            showLoading(false);
+        }, 1000);
     }
 }
 
