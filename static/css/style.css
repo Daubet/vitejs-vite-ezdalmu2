@@ -13,7 +13,9 @@
     --radius: 8px;
     --transition: all 0.3s ease;
     --warning: #f56565;
+    --warning-rgb: 245, 101, 101; /* Version RGB pour les transparences */
     --success: #38a169;
+    --success-rgb: 56, 161, 105; /* Version RGB pour les transparences */
     --viewer-width: 40%; /* Default viewer width */
 }
 
@@ -124,6 +126,28 @@ button:disabled {
 .btn-primary:hover {
     background-color: var(--primary);
     filter: brightness(1.1);
+}
+
+.btn-secondary {
+    background-color: var(--text-light);
+    color: white;
+    border-color: var(--text-light);
+}
+
+.btn-secondary:hover {
+    background-color: var(--text-light);
+    filter: brightness(1.1);
+}
+
+.btn-sm {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    min-width: auto !important;
+}
+
+.help-buttons {
+    margin-top: -5px;
+    justify-content: center;
 }
 
 .btn-warning {
@@ -1287,12 +1311,25 @@ hr {
 /* Extracted images styles */
 .extracted-images {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 10px;
-    margin-top: 15px;
     max-height: 300px;
     overflow-y: auto;
-    padding-right: 5px;
+    padding: 10px;
+    background: var(--bg);
+    border-radius: var(--radius);
+    margin-top: 10px;
+    border: 1px solid var(--border);
+}
+
+.extracted-images .error-message {
+    grid-column: 1 / -1;
+    padding: 15px;
+    text-align: center;
+    color: var(--warning);
+    background-color: rgba(var(--warning-rgb, 245, 101, 101), 0.1);
+    border: 1px dashed var(--warning);
+    border-radius: var(--radius);
 }
 
 .extracted-images::-webkit-scrollbar {
@@ -1306,6 +1343,10 @@ hr {
 .extracted-images::-webkit-scrollbar-thumb {
     background: var(--border);
     border-radius: 4px;
+}
+
+.extracted-images::-webkit-scrollbar-thumb:hover {
+    background: var(--text-light);
 }
 
 .extracted-image-item {

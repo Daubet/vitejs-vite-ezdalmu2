@@ -110,10 +110,12 @@ function initializeViewerPanel() {
 // Setup event listeners
 function setupEventListeners() {
     // Button click handlers
-    document.getElementById('btn-export').addEventListener('click', exportProject);
+    document.getElementById('btn-export').addEventListener('click', exportZip);
     document.getElementById('btn-import').addEventListener('click', () => fileImport.click());
     document.getElementById('btn-reset').addEventListener('click', resetAll);
     document.getElementById('btn-add-type').addEventListener('click', addType);
+    document.getElementById('btn-example-json').addEventListener('click', downloadExampleJson);
+    document.getElementById('btn-example-zip').addEventListener('click', downloadExampleZip);
     
     // Toggle sidebar buttons - with direct implementation to ensure they work
     const btnToggleProject = document.getElementById('btn-toggle-project');
@@ -211,7 +213,7 @@ function handleKeyboardShortcuts(e) {
 }
 
 // Show toast notification
-function showToast(message, type = 'info') {
+function showToast(message, type = 'info', duration = 3000) {
     // Remove existing toast
     const existingToast = document.querySelector('.toast');
     if (existingToast) {
@@ -221,7 +223,19 @@ function showToast(message, type = 'info') {
     // Create new toast
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
-    toast.textContent = message;
+    
+    // Support for multi-line messages
+    if (message.includes('\n')) {
+        const lines = message.split('\n');
+        lines.forEach((line, index) => {
+            const lineEl = document.createElement('div');
+            lineEl.textContent = line;
+            if (index === 0) lineEl.style.fontWeight = 'bold';
+            toast.appendChild(lineEl);
+        });
+    } else {
+        toast.textContent = message;
+    }
     
     document.body.appendChild(toast);
     
@@ -234,7 +248,7 @@ function showToast(message, type = 'info') {
     setTimeout(() => {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, duration);
 }
 
 // Setup resizable panel
@@ -980,148 +994,43 @@ function undo() {
     document.getElementById('btn-undo').disabled = history.length === 0;
 }
 
-// Export project
-async function exportProject() {
+// Export project to ZIP format (uses new backend endpoint)
+async function exportZip() {
     try {
         showLoading(true);
+        showToast('Création du fichier ZIP...', 'info');
         
-        // Create a new JSZip instance
-        const zip = new JSZip();
+        // Call the backend endpoint to create the ZIP
+        const response = await fetch('/api/export-zip');
         
-        // Collect all image references from blocks
-        const imageReferences = new Set();
-        blocks.forEach(block => {
-            // Look for image references in block content
-            const content = block.content || '';
-            
-            // Match different image reference formats
-            // 1. Standard src="..." pattern
-            const srcMatches = content.match(/src=["']([^"']+)["']/g) || [];
-            srcMatches.forEach(match => {
-                const src = match.replace(/src=["']/, '').replace(/["']$/, '');
-                if (src.includes('/uploads/')) {
-                    imageReferences.add(src);
-                }
-            });
-            
-            // 2. URL pattern without src attribute (sometimes found in markdown or text)
-            const urlMatches = content.match(/https?:\/\/[^/]+\/uploads\/[^\s"')>]+/g) || [];
-            urlMatches.forEach(url => {
-                imageReferences.add(url);
-            });
-            
-            // 3. Relative path pattern
-            const relativeMatches = content.match(/\/uploads\/[^\s"')>]+/g) || [];
-            relativeMatches.forEach(path => {
-                imageReferences.add(path);
-            });
-        });
-        
-        console.log(`Found ${imageReferences.size} image references to include in archive`);
-        
-        // Create a map to store the mapping between original paths and archive paths
-        const pathMapping = {};
-        
-        // Process each image reference
-        let imageCount = 0;
-        for (const src of imageReferences) {
-            try {
-                // Extract the relative path from the URL
-                let relativePath;
-                if (src.startsWith('http')) {
-                    const urlPath = new URL(src).pathname;
-                    relativePath = urlPath.startsWith('/') ? urlPath.substring(1) : urlPath;
-                } else {
-                    relativePath = src.startsWith('/') ? src.substring(1) : src;
-                }
-                
-                // Skip if we already processed this path
-                if (pathMapping[relativePath]) continue;
-                
-                // Construct the full URL if needed
-                const fullUrl = src.startsWith('http') ? src : window.location.origin + (src.startsWith('/') ? src : '/' + src);
-                
-                console.log(`Processing image: ${fullUrl} (${relativePath})`);
-                
-                // Fetch the image
-                const response = await fetch(fullUrl);
-                if (!response.ok) {
-                    console.error(`Failed to fetch image ${fullUrl}: ${response.status} ${response.statusText}`);
-                    continue;
-                }
-                
-                const blob = await response.blob();
-                
-                // Extract filename and create archive path
-                const filename = relativePath.split('/').pop();
-                const archivePath = `images/${filename}`;
-                
-                // Add to zip
-                zip.file(archivePath, blob);
-                
-                // Store mapping
-                pathMapping[relativePath] = archivePath;
-                imageCount++;
-                
-                console.log(`Added image to archive: ${archivePath}`);
-            } catch (error) {
-                console.error(`Failed to process image ${src}:`, error);
-            }
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur de serveur');
         }
         
-        // Update the references in the blocks to point to the archive paths
-        const blocksForExport = JSON.parse(JSON.stringify(blocks));
-        blocksForExport.forEach(block => {
-            if (block.content) {
-                let content = block.content;
-                
-                // Replace all references with archive paths
-                for (const [originalPath, archivePath] of Object.entries(pathMapping)) {
-                    // Replace full URLs
-                    content = content.replace(
-                        new RegExp(`https?://[^/]+/${originalPath}`, 'g'),
-                        archivePath
-                    );
-                    
-                    // Replace relative URLs
-                    content = content.replace(
-                        new RegExp(`/${originalPath}`, 'g'),
-                        archivePath
-                    );
-                }
-                
-                block.content = content;
-            }
-        });
+        // Get the ZIP file as a blob
+        const blob = await response.blob();
         
-        // Create the project data
-        const projectData = {
-            blocks: blocksForExport,
-            blockTypes,
-            exportVersion: "2.0",
-            exportDate: new Date().toISOString()
-        };
+        // Create a URL for the blob
+        const url = URL.createObjectURL(blob);
         
-        // Add the project data to the zip
-        zip.file("project.json", JSON.stringify(projectData, null, 2));
-        
-        // Generate the zip file
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        
-        // Create and download the file
-        const url = URL.createObjectURL(zipBlob);
-        
+        // Create a download link
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'project.wtoon';
+        a.download = 'webtoon_export.zip';
         document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
         
-        showToast(`Projet exporté avec succès (${imageCount} images incluses)`, 'success');
+        // Click the download link
+        a.click();
+        
+        // Clean up
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        showToast('Export ZIP réussi', 'success');
     } catch (error) {
-        console.error('Export error:', error);
-        showToast('Erreur lors de l\'exportation', 'error');
+        console.error('Export ZIP error:', error);
+        showToast('Erreur lors de l\'export ZIP: ' + error.message, 'error');
     } finally {
         showLoading(false);
     }
@@ -1135,149 +1044,251 @@ async function importProject(e) {
     showLoading(true);
     
     try {
+        console.log(`Fichier à importer: ${file.name}, type: ${file.type}, taille: ${file.size} octets`);
+        
         // Check if it's a ZIP file (new format) or JSON file (old format)
         const isZip = file.type === 'application/zip' || 
                      file.type === 'application/x-zip-compressed' || 
+                     file.name.toLowerCase().endsWith('.zip') ||
                      file.name.toLowerCase().endsWith('.wtoon');
+        
+        console.log(`Format détecté: ${isZip ? 'ZIP/WTOON' : 'JSON'}`);
         
         if (isZip) {
             // Handle ZIP format (new format)
             await importZipProject(file);
+            showToast('Projet importé avec succès (format ZIP)', 'success');
         } else {
             // Handle JSON format (old format)
             await importJsonProject(file);
+            showToast('Projet importé avec succès (format JSON)', 'success');
         }
-        
-        showToast('Projet importé avec succès', 'success');
     } catch (error) {
         console.error('Import error:', error);
-        showToast('Fichier invalide ou erreur d\'importation', 'error');
+        showToast(`Erreur d'importation: ${error.message || 'Fichier invalide'}`, 'error');
     } finally {
         showLoading(false);
         fileImport.value = null; // Reset file input
     }
 }
 
+// Vérifie et affiche les informations de débogage sur les images importées
+function logImageInfo(imagesArray) {
+    if (!Array.isArray(imagesArray)) {
+        console.error("logImageInfo: ce n'est pas un tableau d'images", imagesArray);
+        return false;
+    }
+    
+    if (imagesArray.length === 0) {
+        console.warn("logImageInfo: tableau d'images vide");
+        return false;
+    }
+    
+    console.log(`Images (${imagesArray.length} au total):`, imagesArray);
+    
+    // Vérifier le format attendu pour chaque image
+    let validFormat = true;
+    for (let i = 0; i < Math.min(5, imagesArray.length); i++) {
+        const img = imagesArray[i];
+        if (!img.url || !img.filename) {
+            console.error(`Image ${i} invalide, format attendu:`, {
+                filename: String,
+                url: String,
+                path: String
+            });
+            validFormat = false;
+            break;
+        }
+    }
+    
+    // Vérifier les URLs des images
+    const firstImg = imagesArray[0];
+    console.log("URL première image:", firstImg.url);
+    console.log("Vérification de l'accès à l'image:", firstImg.url);
+    
+    // Tenter de charger la première image pour vérification
+    const img = new Image();
+    img.onload = () => console.log("✅ Image chargée avec succès");
+    img.onerror = () => console.error("❌ Erreur de chargement de l'image");
+    img.src = firstImg.url;
+    
+    return validFormat;
+}
+
 // Import project from ZIP format
 async function importZipProject(file) {
-    // Load JSZip
-    const zip = new JSZip();
-    
-    // Load the zip file
-    const zipData = await zip.loadAsync(file);
-    
-    // Read the project.json file
-    const projectJsonFile = zipData.file("project.json");
-    if (!projectJsonFile) {
-        throw new Error("Format de fichier invalide : project.json introuvable");
-    }
-    
-    // Parse the project data
-    const projectJson = await projectJsonFile.async("string");
-    const projectData = JSON.parse(projectJson);
-    
-    // Extract blocks and blockTypes
-    blocks = projectData.blocks || [];
-    blockTypes = projectData.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
-    
-    // Create a unique folder for this import
-    const importId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
-    const importFolder = `webtoon_${importId}`;
-    
-    // Create the folder on the server
-    await fetch('/api/create-folder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderName: importFolder })
-    });
-    
-    // Extract and upload all image files
-    const imageFiles = [];
-    const imageMapping = {};
-    
-    // Process all files in the images/ directory
-    for (const [path, file] of Object.entries(zipData.files)) {
-        if (path.startsWith('images/') && !file.dir) {
-            try {
-                // Get the file data
-                const blob = await file.async("blob");
-                
-                // Extract filename
-                const filename = path.split('/').pop();
-                
-                // Create form data
-                const formData = new FormData();
-                formData.append('file', blob, filename);
-                formData.append('targetFolder', importFolder);
-                
-                // Upload to server
-                const uploadResponse = await fetch('/api/upload-to-folder', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const uploadData = await uploadResponse.json();
-                
-                // Store the mapping from archive path to new URL
-                imageMapping[path] = uploadData.url;
-                
-                // Add to imported images array for display
-                imageFiles.push({
-                    filename: filename,
-                    url: uploadData.url,
-                    path: uploadData.path
-                });
-                
-                console.log(`Imported image: ${path} -> ${uploadData.url}`);
-            } catch (error) {
-                console.error(`Failed to process image ${path}:`, error);
-            }
+    try {
+        showToast('Importation du fichier ZIP...', 'info');
+        
+        console.log('Préparation du fichier pour import:', file.name, file.type, file.size + ' octets');
+
+        // Vérifier la taille du fichier
+        const fileSizeMB = file.size / (1024 * 1024); // Taille en MB
+        if (fileSizeMB > 90) {
+            throw new Error(`Fichier trop volumineux (${fileSizeMB.toFixed(1)} MB). La limite est de 90 MB.`);
         }
-    }
-    
-    // Update references in blocks
-    blocks.forEach(block => {
-        if (block.content) {
-            let content = block.content;
+        
+        // Vérifier le type de fichier
+        if (!file.name.toLowerCase().endsWith('.zip') && !file.name.toLowerCase().endsWith('.wtoon')) {
+            throw new Error('Le fichier doit avoir une extension .zip ou .wtoon');
+        }
+        
+        // Create form data with the ZIP file
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // Send the ZIP file to the new backend endpoint
+        const response = await fetch('/api/import-zip', {
+            method: 'POST',
+            body: formData
+        });
+        
+        // Vérifier d'abord si c'est une erreur 413 (entité trop grande)
+        if (response.status === 413) {
+            throw new Error(`Le fichier est trop volumineux pour le serveur. La limite est de 90 MB. 
+Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`);
+        }
+        
+        // Récupérer le contenu de la réponse pour analyse
+        const rawResponse = await response.text();
+        console.log('Réponse brute (début):', rawResponse.substring(0, 200) + '...'); 
+        
+        // Parse JSON response
+        let data;
+        try {
+            data = JSON.parse(rawResponse);
+        } catch (parseError) {
+            console.error('Erreur de parsing JSON:', parseError);
+            console.error('Réponse non JSON (début):', rawResponse.substring(0, 200));
             
-            // Replace all archive paths with new URLs
-            for (const [archivePath, newUrl] of Object.entries(imageMapping)) {
-                content = content.replaceAll(archivePath, newUrl);
+            // Afficher un message d'erreur plus détaillé
+            let detailedError = 'La réponse du serveur n\'est pas au format JSON valide.';
+            
+            // Détecter si c'est du HTML (erreur 500 interne, etc.)
+            if (rawResponse.trim().startsWith('<!DOCTYPE') || rawResponse.trim().startsWith('<html')) {
+                detailedError = 'Le serveur a renvoyé une page HTML au lieu de JSON. Cela peut indiquer une erreur interne du serveur.';
             }
             
-            block.content = content;
+            throw new Error(`Erreur d'importation: ${detailedError}`);
         }
-    });
-    
-    // Display imported images in the extracted images container
-    if (imageFiles.length > 0) {
-        // Update extraction status
-        extractionStatus.textContent = `${imageFiles.length} images importées avec succès`;
-        extractionStatus.className = 'status-message success';
         
-        // Display the images
-        displayExtractedImages(imageFiles);
+        // Vérifier si la réponse contient une erreur
+        if (data.error) {
+            const errorDetails = data.details ? `\nDétails: ${data.details}` : '';
+            throw new Error(`${data.error}${errorDetails}`);
+        }
         
-        // Open project sidebar to show the images
-        projectSidebar.setAttribute('data-visible', 'true');
+        if (data.status !== 'success') {
+            throw new Error(data.error || 'Import failed');
+        }
         
-        // Show toast
-        showToast(`${imageFiles.length} images restaurées depuis le fichier importé`, 'success');
+        console.log('Import success:', data);
+        
+        // Update blocks and blockTypes from the returned project data
+        blocks = data.project.blocks || [];
+        blockTypes = data.project.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
+        
+                    // If API returned image folder info, update UI to show it
+            if (data.imagesFolder) {
+                try {
+                    console.log('Images folder:', data.imagesFolder);
+                    
+                    // Récupérer les images du dossier pour les afficher
+                    // Construire des objets images à partir des informations du dossier
+                    const folderName = data.imagesFolder;
+                    const folderPath = `/static/uploads/${folderName}`;
+                    
+                    // Vérifier s'il y a des métadonnées d'images
+                    const images = [];
+                    
+                    // Si le serveur a renvoyé une liste d'images (nouvelle version)
+                    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                        console.log(`Affichage de ${data.images.length} images fournies par le serveur`);
+                        
+                        // Vérifier et diagnostiquer les problèmes d'images
+                        logImageInfo(data.images);
+                        
+                        // Afficher les images dans l'interface
+                        displayExtractedImages(data.images);
+                        
+                        // Nettoyer le container si les images ne sont pas visibles
+                        setTimeout(() => {
+                            if (extractedImagesContainer.children.length === 0) {
+                                console.error("Les images n'ont pas été affichées correctement. Tentative de récupération...");
+                                // Nouvelle tentative d'affichage
+                                extractedImagesContainer.innerHTML = '';
+                                displayExtractedImages(data.images);
+                            }
+                        }, 500);
+                        
+                    } else {
+                        // Version de secours: nous devons créer les objets images par simulation
+                        console.warn("Pas d'informations détaillées sur les images. Utilisation de la méthode alternative.");
+                        
+                        // Informer l'utilisateur que les images ont été importées mais sans détails
+                        showToast(`Images importées dans le dossier ${folderName}. Utilisez le panneau Projet pour les voir.`, 'info', 7000);
+                    }
+                    
+                    // Mettre à jour les informations sur le statut de l'extraction
+                    const nombreImages = data.images ? data.images.length : 0;
+                    extractionStatus.textContent = `${nombreImages} images importées avec succès`;
+                    extractionStatus.className = 'status-message success';
+                    
+                    // Ouvrir le panel du projet et afficher la section extraction
+                    projectSidebar.setAttribute('data-visible', 'true');
+                    
+                    // Afficher une notification
+                    showToast(`Import réussi : ${blocks.length} blocs et ${nombreImages} images.`, 'success');
+                } catch (error) {
+                    console.error('Error handling images info:', error);
+                    // Continue with import even if displaying images fails
+                }
+            }
+        
+        // Reset history and update UI
+        history = [];
+        aiMap = {};
+        
+        // Don't call loadData() as we already have the project data from the response
+        saveData(); // Save the new data to server
+        renderBlocks();
+        renderBlockTypeButtons();
+        updateBlockCount();
+        document.getElementById('btn-undo').disabled = true;
+        
+    } catch (error) {
+        console.error('Error importing ZIP:', error);
+        
+        // Afficher un message d'erreur amélioré
+        const errorMessage = error.message || 'Erreur inconnue';
+        
+        // Proposer des solutions en fonction du message d'erreur
+        let suggestions = '';
+        if (errorMessage.includes('HTML') || errorMessage.includes('<!DOCTYPE')) {
+            suggestions = '\nEssayez de recharger la page et réessayer.';
+        } else if (errorMessage.includes('project_data.json missing')) {
+            suggestions = '\nVérifiez que votre archive ZIP contient un fichier project_data.json à la racine.';
+        } else if (errorMessage.includes('JSON decode error') || errorMessage.includes('parse')) { 
+            suggestions = '\nLe fichier JSON est mal formaté. Vérifiez sa structure.';
+        } else if (errorMessage.includes('Bad ZIP format')) {
+            suggestions = '\nVérifiez que votre fichier n\'est pas corrompu.';
+        }
+        
+        showToast('Erreur d\'importation: ' + errorMessage + suggestions, 'error', 10000); // Afficher plus longtemps
+        throw error; // Re-throw for the parent import function to handle
     }
-    
-    // Reset history and save
-    history = [];
-    aiMap = {};
-    saveData();
-    renderBlocks();
-    renderBlockTypeButtons();
-    updateBlockCount();
-    document.getElementById('btn-undo').disabled = true;
 }
 
 // Import project from JSON format (legacy)
 async function importJsonProject(file) {
     return new Promise((resolve, reject) => {
+        // Vérifier la taille du fichier
+        const fileSizeMB = file.size / (1024 * 1024); // Taille en MB
+        if (fileSizeMB > 90) {
+            reject(new Error(`Fichier trop volumineux (${fileSizeMB.toFixed(1)} MB). La limite est de 90 MB.`));
+            return;
+        }
+        
         const reader = new FileReader();
         
         reader.onload = async function(event) {
@@ -2041,36 +2052,65 @@ async function extractFirecrawl() {
 
 // Display extracted images
 function displayExtractedImages(images) {
+    if (!images || !Array.isArray(images) || images.length === 0) {
+        console.error("displayExtractedImages: données d'images invalides ou vides", images);
+        extractedImagesContainer.innerHTML = '<div class="error-message">Aucune image trouvée ou format invalide</div>';
+        return;
+    }
+    
+    console.log(`Affichage de ${images.length} images dans le conteneur`);
     extractedImagesContainer.innerHTML = '';
     
     // Store images in a global variable for navigation
     window.extractedImages = images;
     
+    // Créer tous les éléments d'images
+    const fragment = document.createDocumentFragment();
+    
     images.forEach((image, index) => {
-        // Clone the template
-        const imageElement = extractedImageTemplate.content.cloneNode(true);
-        
-        // Set image source
-        const thumbnail = imageElement.querySelector('.thumbnail');
-        thumbnail.src = image.url;
-        thumbnail.alt = image.filename;
-        
-        // Add event listener to the view button
-        const viewBtn = imageElement.querySelector('.view-btn');
-        viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
-        viewBtn.addEventListener('click', () => {
-            showExtractedImage(image, index);
-        });
-        
-        // Remove the use button as it's redundant
-        const useBtn = imageElement.querySelector('.use-btn');
-        if (useBtn) {
-            useBtn.remove();
+        try {
+            // Clone the template
+            const imageElement = extractedImageTemplate.content.cloneNode(true);
+            
+            // Set image source with error handling
+            const thumbnail = imageElement.querySelector('.thumbnail');
+            
+            // Définir un gestionnaire d'erreur avant de définir la source
+            thumbnail.onerror = function() {
+                this.onerror = null; // Éviter les boucles infinies
+                console.error(`Erreur de chargement de l'image ${index}:`, image.url);
+                this.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiPkltYWdlIGludHJvdXZhYmxlPC90ZXh0Pjwvc3ZnPg=='; // Image d'erreur
+                this.alt = 'Image introuvable';
+            };
+            
+            thumbnail.src = image.url;
+            thumbnail.alt = image.filename || `Image ${index + 1}`;
+            
+            // Add event listener to the view button
+            const viewBtn = imageElement.querySelector('.view-btn');
+            viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
+            viewBtn.addEventListener('click', () => {
+                showExtractedImage(image, index);
+            });
+            
+            // Remove the use button as it's redundant
+            const useBtn = imageElement.querySelector('.use-btn');
+            if (useBtn) {
+                useBtn.remove();
+            }
+            
+            // Add to fragment (plus efficace pour de nombreux éléments)
+            fragment.appendChild(imageElement);
+        } catch (error) {
+            console.error(`Erreur lors de l'ajout de l'image ${index}:`, error);
         }
-        
-        // Add to container
-        extractedImagesContainer.appendChild(imageElement);
     });
+    
+    // Add all images to container in one operation
+    extractedImagesContainer.appendChild(fragment);
+    
+    // Log le résultat
+    console.log(`${extractedImagesContainer.children.length} éléments d'images ajoutés au conteneur`);
 }
 
 // Show extracted image in viewer
@@ -2411,6 +2451,78 @@ async function cleanupUploads() {
             extractionProgress.querySelector('.progress-bar').style.width = '0';
             showLoading(false);
         }, 1000);
+    }
+}
+
+// Télécharger un exemple de JSON valide
+async function downloadExampleJson() {
+    try {
+        showToast('Téléchargement de l\'exemple JSON...', 'info');
+        
+        // Appeler l'API pour récupérer l'exemple
+        const response = await fetch('/api/example-json');
+        
+        if (!response.ok) {
+            throw new Error('Erreur lors de la récupération de l\'exemple');
+        }
+        
+        // Récupérer le contenu en blob
+        const blob = await response.blob();
+        
+        // Créer un lien de téléchargement
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'example_project_data.json';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Nettoyer
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        showToast('Exemple JSON téléchargé avec succès', 'success');
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Erreur lors du téléchargement de l\'exemple', 'error');
+    }
+}
+
+// Télécharger un exemple de ZIP valide
+async function downloadExampleZip() {
+    try {
+        showToast('Téléchargement de l\'exemple ZIP...', 'info');
+        
+        // Appeler l'API pour récupérer l'exemple
+        const response = await fetch('/api/example-zip');
+        
+        if (!response.ok) {
+            throw new Error('Erreur lors de la récupération de l\'exemple');
+        }
+        
+        // Récupérer le contenu en blob
+        const blob = await response.blob();
+        
+        // Créer un lien de téléchargement
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'exemple_webtoon.zip';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Nettoyer
+        setTimeout(() => {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }, 100);
+        
+        showToast('Exemple ZIP téléchargé avec succès', 'success');
+    } catch (error) {
+        console.error('Erreur:', error);
+        showToast('Erreur lors du téléchargement de l\'exemple', 'error');
     }
 }
 

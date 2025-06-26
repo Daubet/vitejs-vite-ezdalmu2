@@ -15,10 +15,13 @@ import asyncio
 import aiohttp
 import aiofiles
 import mimetypes
+import zipfile
 from firecrawl import AsyncFirecrawlApp
 from urllib.parse import urljoin, urlparse
 from werkzeug.utils import secure_filename
 from PIL import Image
+import datetime
+import hashlib
 
 # Clé API Firecrawl par défaut
 FIRECRAWL_API_KEY = 'fc-4e2ef9d083654a49ab17a5dc27888c03'
@@ -29,7 +32,7 @@ mimetypes.add_type('image/webp', '.webp')
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'webtoon-editor-secret-key'
 app.config['UPLOAD_FOLDER'] = os.path.join('static', 'uploads')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB max upload
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # Augmenté à 100 MB max upload
 logging.basicConfig(level=logging.INFO)
 
 # Ensure the data and uploads directories exist
@@ -280,18 +283,12 @@ def extract_webtoon_images(url, save_folder):
                 # For WebP files, consider converting to PNG if needed
                 if ext == '.webp':
                     try:
+                        # Convert WebP -> PNG et ne conserver que le PNG pour éviter les doublons
                         im = Image.open(io.BytesIO(img_response.content)).convert("RGB")
-                        # Save both WebP and PNG versions
-                        with open(img_path, 'wb') as f:
-                            f.write(img_response.content)
-                        
-                        # Also save as PNG for compatibility
                         png_filename = f'image_{i+1:03d}.png'
                         png_path = os.path.join(save_folder, png_filename)
                         im.save(png_path, "PNG", optimize=True)
-                        
-                        # Use WebP version by default
-                        img_filename_to_use = img_filename
+                        img_filename_to_use = png_filename  # On utilisera la version PNG
                     except Exception as e:
                         logging.error(f"WEBP convert error {img_url}: {e}")
                         continue
@@ -332,55 +329,147 @@ async def extract_firecrawl_images(url, api_key, save_folder):
         # Initialize Firecrawl
         app = AsyncFirecrawlApp(api_key=api_key)
         
-        # Scrape the URL to get image URLs via JSON extraction
+        # Scrape the URL to get image URLs
         logging.info("Launching page scraping...")
-        # Using a simple dict for json_options which firecrawl should handle internally
-        scrape_response = await app.scrape_url(
-            url=url,
-            formats=['json'],
-            json_options={
-                'prompt': 'Extract all the chapter page image URLs from this manga page. Look for images with alt text like "chapter page 1", "chapter page 2", etc. Return them as a list of URLs.'
-            }
-        )
         
-        # Check if we got a valid response
-        if not scrape_response or not hasattr(scrape_response, 'json') or not scrape_response.json:
-            logging.error("Error: Could not retrieve JSON content.")
-            logging.error(f"Response received: {scrape_response}")
-            return []
-
-        json_content = scrape_response.json
-        logging.info("Scraping completed. Analyzing JSON content...")
-        logging.info(f"JSON content received: {json_content}")
-        
-        # Extract image URLs from the JSON response
-        image_urls = []
-        
-        # The AI might return URLs in 'chapterPageImageUrls'
-        if isinstance(json_content, dict) and 'chapterPageImageUrls' in json_content:
-            image_urls = json_content['chapterPageImageUrls']
-        else:
-            # Fallback: search all values in the dictionary
-            if isinstance(json_content, dict):
-                for key, value in json_content.items():
-                    if isinstance(value, list):
-                        # If it's a list, add all items that look like URLs
-                        for item in value:
-                            if isinstance(item, str) and 'http' in item:
-                                image_urls.append(item)
-                    elif isinstance(value, str) and 'http' in value:
-                        image_urls.append(value)
-            elif isinstance(json_content, list):
-                # If it's directly a list of URLs
-                for item in json_content:
-                    if isinstance(item, str) and 'http' in item:
-                        image_urls.append(item)
-        
-        if not image_urls:
-            logging.error("No chapter images found in the JSON response.")
-            return []
+        # Utiliser plusieurs formats pour maximiser les chances de trouver des images
+        try:
+            scrape_response = await app.scrape_url(
+                url=url,
+                formats=['html', 'screenshot']  # Utiliser html et screenshot
+            )
             
-        logging.info(f"Found {len(image_urls)} chapter images.")
+            # Check if we got a valid response
+            if not scrape_response:
+                logging.error("Error: Empty response from Firecrawl")
+                return []
+
+            logging.info("Scraping completed. Analyzing response...")
+            
+            # Liste pour stocker les URLs d'images
+            image_urls = []
+            
+            # 1. Extraire les images du HTML
+            if hasattr(scrape_response, 'html') and scrape_response.html:
+                from bs4 import BeautifulSoup
+                
+                # Créer un document HTML analysable
+                soup = BeautifulSoup(scrape_response.html, 'lxml')
+                
+                # Conteneurs typiques des commentaires et profils
+                excluded_containers = [
+                    '.comment', '.comments', '.comment-section', 
+                    '.user-profile', '.user-avatar', '.avatar',
+                    '#comments', '#comment-section',
+                    '.social-share', '.share-buttons'
+                ]
+                
+                # Marquer les images dans des conteneurs à exclure
+                excluded_images = set()
+                for container_selector in excluded_containers:
+                    try:
+                        for container in soup.select(container_selector):
+                            for img in container.select('img'):
+                                for attr in ['src', 'data-src', 'data-original']:
+                                    if attr in img.attrs:
+                                        img_url = img[attr]
+                                        if isinstance(img_url, str) and 'http' in img_url:
+                                            excluded_images.add(img_url)
+                    except Exception as e:
+                        logging.debug(f"Error filtering container {container_selector}: {str(e)}")
+                
+                # Trouver toutes les balises image
+                all_images = []
+                for img_tag in soup.select('img'):
+                    # Chercher dans différents attributs où les URLs d'image peuvent se trouver
+                    for attr in ['src', 'data-src', 'data-original', 'data-lazy-src']:
+                        if attr in img_tag.attrs:
+                            img_url = img_tag[attr]
+                            if isinstance(img_url, str) and 'http' in img_url:
+                                # Calculer les dimensions de l'image
+                                width = img_tag.get('width', '0')
+                                height = img_tag.get('height', '0')
+                                try:
+                                    width_val = int(str(width).replace('px', '')) if width else 0
+                                    height_val = int(str(height).replace('px', '')) if height else 0
+                                except ValueError:
+                                    width_val, height_val = 0, 0
+                                
+                                all_images.append({
+                                    'url': img_url,
+                                    'width': width_val,
+                                    'height': height_val,
+                                    'alt': str(img_tag.get('alt', '')),
+                                    'class': str(img_tag.get('class', ''))
+                                })
+                                break
+                
+                # Filtrer les images pertinentes
+                filtered_images = []
+                
+                # Mots-clés à exclure (uniquement les plus évidents)
+                exclude_keywords = [
+                    'avatar', 'profile', 'user', 'gravatar', 'icon-',
+                    'facebook', 'twitter', 'pinterest', 'whatsapp', 'instagram'
+                ]
+                
+                # Filtrage simple
+                for img in all_images:
+                    img_url = img['url']
+                    
+                    # Ignorer les images des conteneurs exclus (commentaires, etc.)
+                    if img_url in excluded_images:
+                        continue
+                    
+                    # Vérifier si c'est une petite icône sociale
+                    url_lower = img_url.lower()
+                    is_social_icon = any(social in url_lower for social in ['facebook', 'twitter', 'pinterest', 'instagram', 'whatsapp'])
+                    
+                    # Les très petites images sont probablement des icônes
+                    is_tiny_image = (img['width'] > 0 and img['height'] > 0) and (img['width'] < 50 or img['height'] < 50)
+                    
+                    # Images de taille moyenne qui sont probablement des avatars
+                    alt_text = img['alt'].lower()
+                    is_profile_image = any(keyword in url_lower or keyword in alt_text for keyword in ['avatar', 'profile', 'user', 'gravatar'])
+                    
+                    # Exclure uniquement les petites images sociales et les avatars
+                    if (is_social_icon and is_tiny_image) or (is_profile_image and img['width'] < 100 and img['height'] < 100):
+                        continue
+                    
+                    # Exclure directement les .svg (souvent logos)
+                    if img_url.lower().endswith('.svg'):
+                        continue
+                    
+                    # Garder toutes les autres images
+                    filtered_images.append(img_url)
+                
+                # Utiliser les images filtrées
+                image_urls = filtered_images
+                
+                logging.info(f"Found {len(all_images)} total images, filtered to {len(image_urls)} relevant images")
+            
+            # 2. Si aucune image trouvée et qu'on a une capture d'écran, on la sauvegarde
+            if len(image_urls) == 0 and hasattr(scrape_response, 'screenshot') and scrape_response.screenshot:
+                screenshot_path = os.path.join(save_folder, 'page_screenshot.png')
+                # S'assurer que screenshot est bien un objet bytes
+                screenshot_data = scrape_response.screenshot
+                if isinstance(screenshot_data, bytes):
+                    with open(screenshot_path, 'wb') as f:
+                        f.write(screenshot_data)
+                    logging.info(f"Saved page screenshot to {screenshot_path}")
+                else:
+                    logging.error("Screenshot data is not in the expected format")
+            
+            # Log si aucune image trouvée
+            if not image_urls:
+                logging.error("No chapter images found in the scrape response.")
+                return []
+                
+            logging.info(f"Found {len(image_urls)} chapter images in total.")
+        
+        except Exception as e:
+            logging.error(f"Error during scraping: {str(e)}")
+            return []
 
         # Download all images in parallel
         images = []
@@ -413,20 +502,21 @@ async def extract_firecrawl_images(url, api_key, save_folder):
                 if result is None:
                     continue
                 
-                # Process successful downloads
-                img_filename = result.get('filename')
-                img_path = result.get('path')
-                
-                if img_filename and img_path:
-                    # Create URL for the saved image using the new serve_upload route
-                    folder_id = os.path.basename(save_folder)
-                    img_url_path = url_for('serve_upload', fname=f'{folder_id}/{img_filename}')
+                # Process successful downloads - we know result is a dict here
+                if isinstance(result, dict):
+                    img_filename = result.get('filename')
+                    img_path = result.get('path')
                     
-                    images.append({
-                        'filename': img_filename,
-                        'url': img_url_path,
-                        'path': img_path
-                    })
+                    if img_filename and img_path:
+                        # Create URL for the saved image using the new serve_upload route
+                        folder_id = os.path.basename(save_folder)
+                        img_url_path = url_for('serve_upload', fname=f'{folder_id}/{img_filename}')
+                        
+                        images.append({
+                            'filename': img_filename,
+                            'url': img_url_path,
+                            'path': img_path
+                        })
         
         return images
         
@@ -465,20 +555,17 @@ async def download_image(session, url, filepath, index, referer_url=None):
                     logging.error(f"Not an image: {url} (Content-Type: {content_type})")
                     return None
                 
-                # Handle WebP images - save both WebP and PNG versions
+                # Handle WebP images - convertir en PNG et ne pas conserver le .webp
                 file_ext = os.path.splitext(filepath)[1].lower()
                 if file_ext == '.webp':
                     try:
-                        # Save original WebP
-                        async with aiofiles.open(filepath, mode='wb') as f:
-                            await f.write(content)
-                        
-                        # Also save as PNG for compatibility
                         im = Image.open(io.BytesIO(content)).convert("RGB")
                         png_path = filepath.replace('.webp', '.png')
+                        # Sauvegarde synchronously (Pillow requires file path or sync file object)
                         im.save(png_path, "PNG", optimize=True)
-                        
-                        logging.info(f"Successfully downloaded and converted: {filepath}")
+                        logging.info(f"Successfully downloaded and converted (PNG only): {png_path}")
+                        saved_filename = os.path.basename(png_path)
+                        saved_path = png_path
                     except Exception as e:
                         logging.error(f"WEBP convert error for {url}: {str(e)}")
                         return None
@@ -490,8 +577,8 @@ async def download_image(session, url, filepath, index, referer_url=None):
                     logging.info(f"Successfully downloaded: {filepath}")
                 
                 return {
-                    'filename': os.path.basename(filepath),
-                    'path': filepath,
+                    'filename': saved_filename,
+                    'path': saved_path,
                     'index': index
                 }
             else:
@@ -785,6 +872,346 @@ def api_upload_to_folder():
         })
     
     return jsonify({"error": "Failed to upload file"}), 500
+
+# ── helper ──────────────────────────────────────────────────────────────────────────
+def latest_webtoon_folder() -> str | None:
+    """Retourne le chemin du dossier webtoon_* le plus récent dans uploads/."""
+    uploads = app.config['UPLOAD_FOLDER']
+    candidates = [
+        os.path.join(uploads, d) for d in os.listdir(uploads)
+        if d.startswith("webtoon_") and os.path.isdir(os.path.join(uploads, d))
+    ]
+    if not candidates:
+        return None
+    return max(candidates, key=os.path.getmtime)
+
+# ── nouvelle route d'export ZIP ────────────────────────────────────────────────
+@app.route('/api/export-zip')
+def api_export_zip():
+    """
+    Crée une archive ZIP contenant :
+      • project_data.json   (blocs + clés + types)
+      • /images/*           (toutes les images du dossier webtoon_* le plus récent)
+      Les doublons d'images (même contenu) sont ignorés.
+    """
+    try:
+        project_json = load_data()
+        img_folder   = latest_webtoon_folder()          # peut être None
+
+        # fichier temporaire .zip
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tmp.close()  # on le referme, zipfile va le rouvrir
+
+        with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as z:
+            # 1) JSON
+            z.writestr("project_data.json", json.dumps(project_json, ensure_ascii=False, indent=2))
+
+            # 2) Images (si dossier trouvé) avec déduplication par hash
+            if img_folder:
+                seen_hashes: set[str] = set()
+                for root, _, files in os.walk(img_folder):
+                    for f in files:
+                        abs_path = os.path.join(root, f)
+                        # calcul hash
+                        try:
+                            with open(abs_path, 'rb') as fp:
+                                file_bytes = fp.read()
+                                file_hash  = hashlib.sha256(file_bytes).hexdigest()
+                        except Exception as e:
+                            logging.error(f"Erreur lecture image {abs_path}: {e}")
+                            continue
+
+                        if file_hash in seen_hashes:
+                            logging.info(f"Doublon ignoré: {f}")
+                            continue  # skip duplicate content
+
+                        seen_hashes.add(file_hash)
+                        z.write(abs_path, arcname=os.path.join("images", f))
+
+        return send_file(
+            tmp.name,
+            as_attachment=True,
+            download_name="webtoon_export.zip",
+            mimetype="application/zip"
+        )
+    except Exception as e:
+        logging.error(f"ZIP export error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/example-json')
+def api_example_json():
+    """Route pour télécharger un exemple de fichier project_data.json valide"""
+    try:
+        # Créer un exemple simple
+        example_data = {
+            "blocks": [
+                {
+                    "id": "1",
+                    "type": "B",
+                    "number": 1,
+                    "content": "Exemple de bloc de texte"
+                }
+            ],
+            "blockTypes": ["HB", "B", "DB", "C", "HC"],
+            "exportVersion": "2.0",
+            "exportDate": datetime.datetime.now().isoformat()
+        }
+        
+        # Créer un fichier temporaire
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".json") as tmp:
+            tmp.write(json.dumps(example_data, ensure_ascii=False, indent=2).encode('utf-8'))
+            tmp_path = tmp.name
+            
+        return send_file(
+            tmp_path,
+            as_attachment=True,
+            download_name="project_data.json",
+            mimetype="application/json"
+        )
+    except Exception as e:
+        logging.error(f"Erreur exemple JSON: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/example-zip')
+def api_example_zip():
+    """Route pour télécharger un exemple de fichier ZIP valide avec structure correcte"""
+    try:
+        # Créer un exemple simple de données de projet
+        example_data = {
+            "blocks": [
+                {
+                    "id": "1",
+                    "type": "B",
+                    "number": 1,
+                    "content": "Exemple de bloc de texte"
+                },
+                {
+                    "id": "2",
+                    "type": "C",
+                    "number": 1,
+                    "content": "Ceci est un commentaire d'exemple"
+                }
+            ],
+            "blockTypes": ["HB", "B", "DB", "C", "HC"],
+            "exportVersion": "2.0",
+            "exportDate": datetime.datetime.now().isoformat()
+        }
+        
+        # Créer un fichier ZIP temporaire
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+        tmp.close()
+        
+        # Créer le zip avec la structure correcte
+        with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as z:
+            # 1. Ajouter le fichier project_data.json
+            z.writestr("project_data.json", json.dumps(example_data, ensure_ascii=False, indent=2))
+            
+            # 2. Créer un dossier images/ vide (pas nécessaire, mais pour la démonstration)
+            z.writestr("images/.keep", "")
+        
+        # Envoyer le fichier
+        return send_file(
+            tmp.name,
+            as_attachment=True,
+            download_name="exemple_import.zip",
+            mimetype="application/zip"
+        )
+    except Exception as e:
+        logging.error(f"Erreur création exemple ZIP: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/import-zip', methods=['POST'])
+def api_import_zip():
+    """
+    Attend un fichier ZIP contenant :
+      - project_data.json (n'importe où dans l'archive)
+      - images/*  (facultatif, avec hiérarchie préservée)
+
+    • Met à jour le fichier project_data.json sur le serveur
+    • Copie les images dans un nouveau dossier uploads/webtoon_<id>
+    • Renvoie les infos pour recharger l'UI
+    """
+    try:
+        logging.info("=== Début de l'import ZIP ===")
+        
+        # Vérifier la présence du fichier
+        if 'file' not in request.files:
+            logging.error("Pas de partie 'file' dans la requête")
+            return jsonify({"error": "No file part", "details": "Le formulaire doit contenir un champ 'file'"}), 400
+        
+        up = request.files['file']
+        logging.info(f"Fichier reçu: {up.filename}, type MIME: {up.content_type}")
+        
+        if not up.filename:
+            logging.error("Nom de fichier vide")
+            return jsonify({"error": "Empty filename", "details": "Le nom du fichier est vide"}), 400
+        
+        # Accepter tous les types de ZIP (pas seulement les .zip, mais aussi .wtoon)
+        if not (up.filename.lower().endswith('.zip') or up.filename.lower().endswith('.wtoon')):
+            logging.error(f"Extension non valide: {up.filename}")
+            return jsonify({"error": "Need a .zip or .wtoon file"}), 400
+    except Exception as e:
+        # Assurer que même les erreurs inattendues renvoient du JSON valide
+        logging.exception("Erreur inattendue lors de la validation du fichier")
+        return jsonify({"error": "Erreur serveur", "details": str(e)}), 500
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            logging.info(f"Dossier temporaire créé: {tmpdir}")
+            zpath = os.path.join(tmpdir, 'in.zip')
+            up.save(zpath)
+            logging.info(f"Fichier ZIP sauvegardé: {zpath}, taille: {os.path.getsize(zpath)} octets")
+
+            try:
+                with zipfile.ZipFile(zpath) as z:
+                    # Log des fichiers contenus dans le ZIP
+                    file_list = z.namelist()
+                    logging.info(f"Contenu du ZIP: {len(file_list)} fichiers")
+                    if len(file_list) > 0:
+                        logging.info(f"Premiers fichiers: {', '.join(file_list[:5])}")
+                    
+                    # ----- trouver le JSON peu importe le dossier -------------
+                    json_name = next((n for n in file_list 
+                                      if os.path.basename(n).lower() == 'project_data.json'), None)
+                    if not json_name:
+                        logging.error("Aucun fichier project_data.json trouvé dans l'archive")
+                        return jsonify({
+                            "error": "project_data.json missing", 
+                            "details": "Le fichier project_data.json est introuvable dans l'archive",
+                            "files_found": file_list[:10] if len(file_list) <= 10 else file_list[:10] + ["..."]
+                        }), 400
+                    
+                    logging.info(f"Fichier JSON trouvé: {json_name}")
+                    
+                    try:
+                        # Tenter de lire le fichier JSON
+                        json_content = z.read(json_name)
+                        logging.info(f"Taille du JSON: {len(json_content)} octets")
+                        
+                        # Vérifier si le contenu ressemble à du HTML/XML (commence par <)
+                        decoded_start = json_content[:100].decode('utf-8', errors='ignore').strip()
+                        logging.info(f"Début du contenu: {decoded_start}")
+                        if decoded_start.startswith('<'):
+                            logging.error("Le fichier JSON contient du HTML/XML au lieu de JSON")
+                            return jsonify({
+                                "error": "HTML detected", 
+                                "details": "Le fichier project_data.json contient du HTML au lieu de JSON. Vérifiez que vous avez bien exporté un fichier JSON valide.",
+                                "content_preview": decoded_start
+                            }), 400
+                        
+                        # Essayer différents encodages si UTF-8 échoue
+                        proj_data = None
+                        decode_errors = []
+                        
+                        for encoding in ['utf-8', 'utf-8-sig', 'latin1', 'cp1252']:
+                            try:
+                                decoded = json_content.decode(encoding)
+                                proj_data = json.loads(decoded)
+                                logging.info(f"Décodage réussi avec l'encodage: {encoding}")
+                                break
+                            except UnicodeDecodeError as ude:
+                                decode_errors.append(f"{encoding}: {str(ude)}")
+                                continue
+                            except json.JSONDecodeError as jde:
+                                decode_errors.append(f"{encoding}: {str(jde)}")
+                                continue
+                            
+                        if proj_data is None:
+                            logging.error(f"Échec du décodage avec tous les encodages: {decode_errors}")
+                            return jsonify({
+                                "error": "JSON decode error", 
+                                "details": "Impossible de décoder le fichier JSON avec les encodages connus",
+                                "decode_attempts": decode_errors,
+                                "content_preview": decoded_start
+                            }), 400
+                            
+                    except Exception as e:
+                        logging.exception("Erreur lors de la lecture du fichier JSON")
+                        # Afficher les 100 premiers caractères pour le débogage
+                        content_preview = json_content[:100].decode('utf-8', errors='ignore') if json_content else "EMPTY"
+                        return jsonify({
+                            "error": "JSON read error", 
+                            "details": f"Erreur lors de la lecture du fichier JSON: {str(e)}",
+                            "content_preview": content_preview
+                        }), 400
+                    
+                    # Vérification de la structure du JSON
+                    if not isinstance(proj_data, dict):
+                        logging.error(f"JSON invalide: doit être un objet, reçu: {type(proj_data)}")
+                        return jsonify({
+                            "error": "Invalid JSON structure", 
+                            "details": f"Les données JSON doivent être un objet, type reçu: {type(proj_data)}"
+                        }), 400
+                    
+                    if 'blocks' not in proj_data:
+                        logging.warning("Clé 'blocks' manquante dans les données du projet")
+                        proj_data['blocks'] = []
+                    
+                    logging.info(f"Données du projet: {len(proj_data.get('blocks', []))} blocs, types: {proj_data.get('blockTypes', [])}")
+                    
+                    # Sauvegarder les données
+                    save_data(proj_data)
+                    logging.info("Données du projet sauvegardées")
+
+                    # ----- extraire les images --------------------------------
+                    img_members = [n for n in file_list
+                                   if n.startswith('images/') and not n.endswith('/')]
+                    logging.info(f"Nombre d'images trouvées: {len(img_members)}")
+                    
+                    images_folder = None
+                    images_info = []
+                    if img_members:
+                        folder_id     = f"webtoon_{uuid.uuid4().hex[:8]}"
+                        images_folder = os.path.join(app.config['UPLOAD_FOLDER'], folder_id)
+                        os.makedirs(images_folder, exist_ok=True)
+                        logging.info(f"Dossier d'images créé: {images_folder}")
+                        
+                        for i, member in enumerate(img_members):
+                            dest = os.path.join(images_folder,
+                                                os.path.relpath(member, 'images'))
+                            os.makedirs(os.path.dirname(dest), exist_ok=True)
+                            logging.info(f"Extraction de {member} vers {dest}")
+                            try:
+                                with z.open(member) as src, open(dest, 'wb') as dst:
+                                    shutil.copyfileobj(src, dst)
+                                
+                                # Ajouter les informations d'image pour le frontend
+                                filename = os.path.basename(dest)
+                                folder = os.path.basename(images_folder)
+                                url_path = url_for('serve_upload', fname=f'{folder}/{filename}')
+                                
+                                images_info.append({
+                                    'filename': filename,
+                                    'url': url_path,
+                                    'path': dest
+                                })
+                            except Exception as e:
+                                logging.error(f"Erreur lors de l'extraction de {member}: {str(e)}")
+                                # Continue avec les autres images
+
+                    logging.info("=== Import ZIP réussi ===")
+                    logging.info(f"Images extraites: {len(images_info)}")
+                    return jsonify({
+                        "status": "success",
+                        "imagesFolder": os.path.basename(images_folder) if images_folder else None,
+                        "images": images_info,  # Ajouter la liste des images
+                        "project": proj_data
+                    })
+
+            except zipfile.BadZipFile:
+                logging.error("Format de fichier ZIP invalide")
+                return jsonify({
+                    "error": "Bad ZIP format", 
+                    "details": "Le fichier n'est pas un ZIP valide. Vérifiez que le fichier n'est pas corrompu."
+                }), 400
+
+    except Exception as e:
+        logging.exception("Import ZIP failed")
+        return jsonify({
+            "error": "Server error", 
+            "details": str(e),
+            "type": type(e).__name__
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

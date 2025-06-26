@@ -1,0 +1,19 @@
+{
+  "blocks": [
+    {
+      "id": "1",
+      "type": "B",
+      "number": 1,
+      "content": "Exemple de bloc de texte"
+    }
+  ],
+  "blockTypes": [
+    "HB",
+    "B",
+    "DB",
+    "C",
+    "HC"
+  ],
+  "exportVersion": "2.0",
+  "exportDate": "2025-06-26T13:57:08.334149"
+}
