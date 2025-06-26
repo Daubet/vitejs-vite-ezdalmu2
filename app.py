@@ -22,6 +22,8 @@ from werkzeug.utils import secure_filename
 from PIL import Image
 import datetime
 import hashlib
+import atexit
+import signal
 
 # Clé API Firecrawl par défaut
 FIRECRAWL_API_KEY = 'fc-4e2ef9d083654a49ab17a5dc27888c03'
@@ -588,8 +590,41 @@ async def download_image(session, url, filepath, index, referer_url=None):
         logging.error(f"Failed to download {url}: {str(e)}")
         raise e
 
+def cleanup_uploads_folder():
+    uploads_dir = app.config['UPLOAD_FOLDER']
+    if os.path.exists(uploads_dir):
+        for item in os.listdir(uploads_dir):
+            item_path = os.path.join(uploads_dir, item)
+            try:
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+            except Exception as e:
+                logging.error(f"Erreur suppression {item_path}: {e}")
+
+# Nettoyage au démarrage
+cleanup_uploads_folder()
+
+# Nettoyage à la fermeture
+atexit.register(cleanup_uploads_folder)
+
+def handle_exit(*args):
+    cleanup_uploads_folder()
+    os._exit(0)
+
+signal.signal(signal.SIGINT, handle_exit)
+signal.signal(signal.SIGTERM, handle_exit)
+
+# Désactiver toute sauvegarde d'image hors import/export ZIP/DOCX
+def is_upload_allowed():
+    # Désactive toute sauvegarde d'image hors import/export
+    return False
+
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
+    if not is_upload_allowed():
+        return jsonify({"error": "Upload désactivé (gestion automatisée)"}), 403
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
         
@@ -788,12 +823,14 @@ def export_docx():
     # Create document
     doc = docx.Document()
     
-    # Add blocks
+    # Add blocks in requested format
     for block in blocks:
-        p = doc.add_paragraph()
-        block_type_number = f"{block['type']}{block['number']} "
-        p.add_run(block_type_number).bold = True
-        p.add_run(block['content'])
+        # Block name (type+number)
+        doc.add_paragraph(f"{block['type']}{block['number']}")
+        # Block content
+        doc.add_paragraph(block['content'])
+        # Double new line (empty paragraph)
+        doc.add_paragraph("")
     
     # Save to temporary file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as tmp:
@@ -835,7 +872,8 @@ def api_create_folder():
 
 @app.route('/api/upload-to-folder', methods=['POST'])
 def api_upload_to_folder():
-    """Upload a file to a specific folder in uploads directory"""
+    if not is_upload_allowed():
+        return jsonify({"error": "Upload désactivé (gestion automatisée)"}), 403
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
         

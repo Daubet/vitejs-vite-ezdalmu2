@@ -112,6 +112,7 @@ function setupEventListeners() {
     // Button click handlers
     document.getElementById('btn-export').addEventListener('click', exportZip);
     document.getElementById('btn-import').addEventListener('click', () => fileImport.click());
+    document.getElementById('btn-export-microsoft').addEventListener('click', exportDocx);
     document.getElementById('btn-reset').addEventListener('click', resetAll);
     document.getElementById('btn-add-type').addEventListener('click', addType);
     document.getElementById('btn-example-json').addEventListener('click', downloadExampleJson);
