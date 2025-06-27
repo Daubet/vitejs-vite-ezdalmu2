@@ -841,58 +841,63 @@ footer {
 }
 
 .suggestions {
-    margin-top: 10px;
-    border-left: 3px solid var(--secondary);
-    padding-left: 10px;
-    animation: slide-down 0.3s ease forwards;
-}
-
-@keyframes slide-down {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+    margin-top: var(--space-3);
+    animation: slide-down 0.3s ease;
 }
 
 .sugg {
-    background-color: var(--primary-light);
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 8px 12px;
-    margin-bottom: 8px;
+    padding: var(--space-3);
+    margin-bottom: var(--space-2);
+    cursor: pointer;
+    transition: var(--transition);
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    animation: fade-in 0.3s ease forwards;
-    opacity: 0;
+    justify-content: space-between;
+    gap: var(--space-3);
 }
 
 .sugg:hover {
-    background-color: var(--primary-light);
-    filter: brightness(0.95);
+    background: var(--primary-light);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.sugg:last-child {
+    margin-bottom: 0;
 }
 
 .sugg span {
     flex: 1;
-    margin-right: 10px;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--text);
 }
 
 .sugg button {
-    background-color: var(--secondary);
+    background: var(--primary);
     color: white;
     border: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
     cursor: pointer;
     transition: var(--transition);
-    padding: 0;
-    font-size: 0.8rem;
+    flex-shrink: 0;
+    min-width: 80px;
 }
 
 .sugg button:hover {
-    transform: scale(1.1);
-    filter: brightness(1.1);
+    background: var(--primary-dark);
+    transform: translateY(-1px);
 }
 
 .ai-loading {
@@ -1551,50 +1556,72 @@ hr {
 
 /* Translation suggestions */
 .translation-suggestions {
-    background: var(--bg-secondary);
-    border-top: 1px solid var(--border-color);
-    padding: 1rem;
-    max-height: 200px;
-    overflow-y: auto;
+    background: var(--bg-light);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+    margin-top: var(--space-3);
 }
 
 .translation-suggestions h4 {
-    margin: 0 0 0.5rem 0;
-    color: var(--text-primary);
-    font-size: 0.9rem;
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+    margin-bottom: var(--space-3);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
 }
 
 .suggestion-item {
-    background: var(--bg-primary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 0.5rem;
-    margin-bottom: 0.5rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-3);
+    margin-bottom: var(--space-2);
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 0.85rem;
-    line-height: 1.3;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
 }
 
 .suggestion-item:hover {
-    background: var(--accent-color);
-    color: white;
-    border-color: var(--accent-color);
+    background: var(--primary-light);
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
 }
 
 .suggestion-item:last-child {
     margin-bottom: 0;
 }
 
-.ocr-text {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 0.5rem;
-    margin-bottom: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--text-secondary);
-    font-style: italic;
+.suggestion-item span {
+    flex: 1;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.suggestion-item button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+    min-width: 80px;
+}
+
+.suggestion-item button:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
 }
 
 /* Zone selection styles */
@@ -1671,10 +1698,10 @@ hr {
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 1000;
     opacity: 0;
     visibility: hidden;
-    transition: all 0.3s ease;
+    transition: var(--transition);
 }
 
 .modal.show {
@@ -1683,20 +1710,21 @@ hr {
 }
 
 .modal.hidden {
-    display: none !important;
+    opacity: 0;
+    visibility: hidden;
 }
 
 .modal-content {
-    background: var(--bg-color);
-    border-radius: 12px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    max-width: 600px;
-    width: 90%;
-    max-height: 80vh;
-    overflow-y: auto;
+    background: var(--bg);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    max-width: 90vw;
+    max-height: 90vh;
+    width: 800px;
+    display: flex;
+    flex-direction: column;
     transform: scale(0.9);
-    transition: transform 0.3s ease;
-    border: 1px solid var(--border-color);
+    transition: var(--transition);
 }
 
 .modal.show .modal-content {
@@ -1705,190 +1733,292 @@ hr {
 
 .modal-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--border-color);
-    background: var(--bg-color);
+    justify-content: space-between;
+    padding: var(--space-5);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-light);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .modal-header h3 {
-    margin: 0;
-    color: var(--text-color);
-    font-size: 18px;
+    font-size: var(--font-size-xl);
     font-weight: 600;
+    color: var(--text);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
 }
 
 .modal-close {
     background: none;
     border: none;
-    font-size: 20px;
-    color: var(--text-muted);
+    color: var(--text-light);
+    font-size: var(--font-size-lg);
     cursor: pointer;
-    padding: 8px;
-    border-radius: 4px;
-    transition: all 0.2s;
+    padding: var(--space-2);
+    border-radius: var(--radius);
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
 }
 
 .modal-close:hover {
-    background: var(--hover-color);
-    color: var(--text-color);
+    background: var(--bg-dark);
+    color: var(--text);
 }
 
 .modal-body {
-    padding: 24px;
-    background: var(--bg-color);
-}
-
-.modal-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border-color);
+    padding: var(--space-5);
+    overflow-y: auto;
+    flex: 1;
+    max-height: calc(90vh - 140px); /* Hauteur maximale sans scroll */
 }
 
 /* Options d'intention */
 .intention-options {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+    max-height: 400px; /* Limite la hauteur pour éviter le scroll */
+    overflow-y: auto;
 }
 
 .intention-option {
-    display: flex;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 16px;
-    border: 2px solid var(--border-color);
-    border-radius: 8px;
+    background: var(--bg-light);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
     cursor: pointer;
-    transition: all 0.2s ease;
-    background: var(--bg-color);
+    transition: var(--transition);
     position: relative;
+    overflow: hidden;
+    min-height: 160px; /* Hauteur minimale fixe */
+    display: flex;
+    flex-direction: column;
 }
 
 .intention-option:hover {
-    border-color: var(--primary-color);
-    background: var(--hover-color);
-    transform: translateY(-1px);
+    border-color: var(--primary);
+    background: var(--primary-light);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
 }
 
 .intention-option.selected {
-    border-color: var(--primary-color);
-    background: var(--primary-color-light);
-    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+    border-color: var(--primary);
+    background: var(--primary-light);
+    box-shadow: var(--shadow-md);
 }
 
 .intention-icon {
-    width: 48px;
-    height: 48px;
-    background: var(--primary-color);
-    color: white;
-    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 20px;
+    width: 48px;
+    height: 48px;
+    background: var(--primary);
+    color: white;
+    border-radius: var(--radius);
+    margin-bottom: var(--space-4);
+    font-size: var(--font-size-lg);
+    transition: var(--transition);
     flex-shrink: 0;
-    transition: all 0.2s ease;
+}
+
+.intention-option:hover .intention-icon {
+    background: var(--primary-dark);
+    transform: scale(1.1);
 }
 
 .intention-option.selected .intention-icon {
-    background: var(--primary-color);
-    transform: scale(1.05);
+    background: var(--primary-dark);
 }
 
 .intention-content {
     flex: 1;
+    display: flex;
+    flex-direction: column;
 }
 
 .intention-content h4 {
-    margin: 0 0 8px 0;
-    color: var(--text-color);
-    font-size: 16px;
+    font-size: var(--font-size-lg);
     font-weight: 600;
+    margin-bottom: var(--space-2);
+    color: var(--text);
 }
 
 .intention-content p {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: var(--font-size-sm);
+    color: var(--text-light);
+    line-height: 1.5;
+    margin-bottom: var(--space-3);
+    flex: 1;
 }
 
 .intention-content textarea {
     width: 100%;
-    margin-top: 12px;
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    background: var(--bg-color);
-    color: var(--text-color);
-    font-family: inherit;
-    font-size: 14px;
-    resize: vertical;
     min-height: 80px;
-    transition: all 0.2s ease;
+    max-height: 120px;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    font-family: var(--font-family);
+    font-size: var(--font-size-sm);
+    background: var(--bg);
+    color: var(--text);
+    resize: vertical;
+    transition: var(--transition);
+    flex-shrink: 0;
 }
 
 .intention-content textarea:focus {
     outline: none;
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-color-light);
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 /* Résultats de reformulation */
 .reformulation-suggestion {
-    background: var(--bg-color);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    padding: 16px;
-    margin-bottom: 16px;
-    transition: all 0.2s ease;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: var(--space-4);
+    margin-bottom: var(--space-3);
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
 }
 
 .reformulation-suggestion:hover {
-    border-color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    background: var(--primary-light);
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+}
+
+.reformulation-suggestion:last-child {
+    margin-bottom: 0;
 }
 
 .suggestion-content {
-    color: var(--text-color);
-    line-height: 1.6;
-    margin-bottom: 16px;
-    white-space: pre-wrap;
+    flex: 1;
+    font-size: var(--font-size-sm);
+    line-height: 1.5;
+    color: var(--text);
 }
 
 .suggestion-apply {
-    width: 100%;
-    justify-content: center;
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+    min-width: 80px;
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.suggestion-apply:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
     .modal-content {
-        width: 95%;
-        margin: 20px;
+        width: 95vw;
+        max-height: 95vh;
+    }
+    
+    .modal-body {
+        max-height: calc(95vh - 140px);
+        padding: var(--space-4);
+    }
+    
+    .intention-options {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+        max-height: 300px;
     }
     
     .intention-option {
-        flex-direction: column;
-        text-align: center;
+        padding: var(--space-4);
+        min-height: 140px;
     }
     
     .intention-icon {
-        align-self: center;
+        width: 40px;
+        height: 40px;
+        font-size: var(--font-size-base);
     }
     
     .modal-actions {
         flex-direction: column;
+        gap: var(--space-2);
     }
     
     .modal-actions .btn {
         width: 100%;
     }
+    
+    .sugg, .suggestion-item, .reformulation-suggestion {
+        flex-direction: column;
+        align-items: stretch;
+        gap: var(--space-2);
+    }
+    
+    .sugg button, .suggestion-item button, .suggestion-apply {
+        width: 100%;
+        justify-content: center;
+    }
 }
 
-/* Zone selection styles */ 
+/* Animations */
+@keyframes slide-down {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fade-in {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* ===== MODAL ACTIONS UNIFIÉES ===== */
+.modal-actions {
+    display: flex;
+    gap: var(--space-3);
+    justify-content: flex-end;
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-4);
+}
+
+.modal-actions .btn {
+    min-width: 100px;
+} 

@@ -184,7 +184,6 @@ function setupEventListeners() {
     // Webtoon extraction
     btnExtractWebtoon.addEventListener('click', extractWebtoon);
     btnExtractFirecrawl.addEventListener('click', extractFirecrawl);
-    document.getElementById('btn-cleanup-uploads').addEventListener('click', cleanupUploads);
     
     // Toggle Firecrawl API key visibility
     toggleFirecrawlKey.addEventListener('click', () => {
@@ -993,9 +992,9 @@ function renderSuggestions(container, suggestions, blockIndex) {
     const aiData = aiMap[blockIndex];
     if (aiData && aiData.sourceLang && aiData.ocrText) {
         const infoDiv = document.createElement('div');
-        infoDiv.className = 'suggestion-info';
+        infoDiv.className = 'suggestion-info mb-3';
         infoDiv.innerHTML = `
-            <small style="color: #666; font-style: italic;">
+            <small style="color: var(--text-light); font-style: italic;">
                 <i class="fas fa-language"></i> Langue détectée: ${aiData.sourceLang} | 
                 <i class="fas fa-eye"></i> Texte original: "${aiData.ocrText.substring(0, 50)}${aiData.ocrText.length > 50 ? '...' : ''}"
             </small>
@@ -1005,34 +1004,40 @@ function renderSuggestions(container, suggestions, blockIndex) {
     
     suggestions.forEach((suggestion, index) => {
         const suggEl = document.createElement('div');
-        suggEl.className = 'sugg';
+        suggEl.className = 'suggestion-card';
         suggEl.style.animationDelay = `${index * 0.1}s`;
         
-        const span = document.createElement('span');
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'suggestion-content';
         
         // Si c'est une suggestion OCR, l'afficher différemment
         if (suggestion.startsWith('[OCR: ')) {
-            span.innerHTML = `<i class="fas fa-eye"></i> <strong>Texte détecté:</strong> ${suggestion.replace('[OCR: ', '').replace(']', '')}`;
-            suggEl.style.backgroundColor = '#f0f8ff';
-            suggEl.style.borderLeft = '3px solid #007bff';
+            contentDiv.innerHTML = `<i class="fas fa-eye"></i> <strong>Texte détecté:</strong> ${suggestion.replace('[OCR: ', '').replace(']', '')}`;
+            suggEl.style.backgroundColor = 'var(--info-light)';
+            suggEl.style.borderLeft = '3px solid var(--info)';
         } else {
-            span.textContent = suggestion;
+            contentDiv.textContent = suggestion;
         }
         
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'suggestion-actions';
+        
         const button = document.createElement('button');
-        button.innerHTML = '<i class="fas fa-check"></i>';
+        button.innerHTML = '<i class="fas fa-check"></i> Appliquer';
+        button.className = 'suggestion-apply';
         button.addEventListener('click', () => acceptSuggestion(blockIndex, suggestion));
         button.addEventListener('click', createRipple);
         
-        suggEl.appendChild(span);
-        suggEl.appendChild(button);
+        actionsDiv.appendChild(button);
+        suggEl.appendChild(contentDiv);
+        suggEl.appendChild(actionsDiv);
         container.appendChild(suggEl);
     });
     
     // Bouton pour masquer les suggestions
     const hideBtn = document.createElement('button');
-    hideBtn.innerHTML = '<i class="fas fa-times"></i> Masquer';
-    hideBtn.className = 'suggestion-hide-btn';
+    hideBtn.innerHTML = '<i class="fas fa-times"></i> Masquer les suggestions';
+    hideBtn.className = 'btn btn-secondary btn-sm mt-3';
     hideBtn.addEventListener('click', () => {
         if (aiMap[blockIndex]) {
             delete aiMap[blockIndex];

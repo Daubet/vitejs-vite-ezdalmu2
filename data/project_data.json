@@ -1,22 +1,34 @@
 {
   "blocks": [
     {
-      "comment": "",
-      "content": "Ed rothotaylorrrrrrr",
+      "type": "HC",
       "number": 1,
-      "type": "DB"
+      "content": "Une catastrophe s'est abattue sur le monde",
+      "comment": ""
     },
     {
-      "comment": "",
-      "content": "Ed rothotaylorrrrrrr",
-      "number": 1,
-      "type": "HC"
+      "type": "HC",
+      "number": 2,
+      "content": "Un desastre d'une ampleur sans precedent dans l'hisoire de l'humanite",
+      "comment": ""
     },
     {
-      "comment": "",
-      "content": "Le destin se moque de moi.",
+      "type": "HC",
+      "number": 3,
+      "content": "",
+      "comment": ""
+    },
+    {
+      "type": "B",
       "number": 1,
-      "type": "ADOLF"
+      "content": "Face à des forces insurmontables, l'humanité chuta dans un chaos sans précédent.",
+      "comment": ""
+    },
+    {
+      "type": "HC",
+      "number": 4,
+      "content": "",
+      "comment": ""
     }
   ],
   "blockTypes": [
@@ -24,8 +36,7 @@
     "B",
     "DB",
     "C",
-    "HC",
-    "ADOLF"
+    "HC"
   ],
   "api_keys": {
     "gemini": "AIzaSyD3cpynpKcO9b-WZ4iO3MpBIQhUkrxa72M",
