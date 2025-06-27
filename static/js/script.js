@@ -947,13 +947,35 @@ function renderSuggestions(container, suggestions, blockIndex) {
     container.innerHTML = '';
     container.style.display = 'block';
     
+    // Ajouter des informations sur la source si disponibles
+    const aiData = aiMap[blockIndex];
+    if (aiData && aiData.sourceLang && aiData.ocrText) {
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'suggestion-info';
+        infoDiv.innerHTML = `
+            <small style="color: #666; font-style: italic;">
+                <i class="fas fa-language"></i> Langue détectée: ${aiData.sourceLang} | 
+                <i class="fas fa-eye"></i> Texte original: "${aiData.ocrText.substring(0, 50)}${aiData.ocrText.length > 50 ? '...' : ''}"
+            </small>
+        `;
+        container.appendChild(infoDiv);
+    }
+    
     suggestions.forEach((suggestion, index) => {
         const suggEl = document.createElement('div');
         suggEl.className = 'sugg';
         suggEl.style.animationDelay = `${index * 0.1}s`;
         
         const span = document.createElement('span');
-        span.textContent = suggestion;
+        
+        // Si c'est une suggestion OCR, l'afficher différemment
+        if (suggestion.startsWith('[OCR: ')) {
+            span.innerHTML = `<i class="fas fa-eye"></i> <strong>Texte détecté:</strong> ${suggestion.replace('[OCR: ', '').replace(']', '')}`;
+            suggEl.style.backgroundColor = '#f0f8ff';
+            suggEl.style.borderLeft = '3px solid #007bff';
+        } else {
+            span.textContent = suggestion;
+        }
         
         const button = document.createElement('button');
         button.innerHTML = '<i class="fas fa-check"></i>';
@@ -965,11 +987,18 @@ function renderSuggestions(container, suggestions, blockIndex) {
         container.appendChild(suggEl);
     });
     
-    const moreBtn = document.createElement('button');
-    moreBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Autres suggestions';
-    moreBtn.addEventListener('click', () => askAi(blockIndex));
-    moreBtn.addEventListener('click', createRipple);
-    container.appendChild(moreBtn);
+    // Bouton pour masquer les suggestions
+    const hideBtn = document.createElement('button');
+    hideBtn.innerHTML = '<i class="fas fa-times"></i> Masquer';
+    hideBtn.className = 'suggestion-hide-btn';
+    hideBtn.addEventListener('click', () => {
+        if (aiMap[blockIndex]) {
+            delete aiMap[blockIndex];
+        }
+        renderBlocks();
+    });
+    hideBtn.addEventListener('click', createRipple);
+    container.appendChild(hideBtn);
 }
 
 // Add block
@@ -1617,18 +1646,21 @@ function acceptSuggestion(blockIndex, suggestion) {
     if (!block) return;
     
     pushHistory();
+    
+    // Si c'est une suggestion OCR, extraire le texte sans le préfixe [OCR: ]
+    if (suggestion.startsWith('[OCR: ')) {
+        suggestion = suggestion.replace('[OCR: ', '').replace(']', '');
+    }
+    
     block.content = suggestion;
     saveData();
-    renderBlocks();
     
-    // Hide suggestions container
-    const blockEl = blocksContainer.children[blockIndex];
-    if (blockEl) {
-        const suggestionsEl = blockEl.querySelector('.suggestions');
-        if (suggestionsEl) {
-            suggestionsEl.style.display = 'none';
-        }
+    // Supprimer les suggestions de ce bloc
+    if (aiMap[blockIndex]) {
+        delete aiMap[blockIndex];
     }
+    
+    renderBlocks();
     
     document.getElementById('btn-undo').disabled = false;
     showToast('Suggestion appliquée', 'success');
@@ -2548,8 +2580,6 @@ async function captureAndTranslate() {
             return;
         }
         
-        showToast('Capture d\'écran en cours...', 'info');
-        
         // Déterminer quelle zone capturer
         let targetElement;
         if (currentPDFDoc) {
@@ -2563,7 +2593,132 @@ async function captureAndTranslate() {
             return;
         }
         
-        // Capturer l'écran avec html2canvas
+        // Activer le mode de sélection de zone
+        showToast('Sélectionnez la zone à traduire en cliquant et glissant', 'info');
+        await enableZoneSelection(targetElement);
+        
+    } catch (error) {
+        console.error('Capture error:', error);
+        showToast('Erreur lors de la capture d\'écran', 'error');
+    }
+}
+
+// Activer la sélection de zone
+async function enableZoneSelection(targetElement) {
+    return new Promise((resolve) => {
+        // Créer l'overlay de sélection
+        const overlay = document.createElement('div');
+        overlay.id = 'zone-selection-overlay';
+        
+        // Créer la zone de sélection
+        const selectionBox = document.createElement('div');
+        selectionBox.id = 'zone-selection-box';
+        
+        overlay.appendChild(selectionBox);
+        document.body.appendChild(overlay);
+        
+        let isSelecting = false;
+        let startX, startY, endX, endY;
+        
+        // Fonction pour mettre à jour la zone de sélection
+        function updateSelectionBox() {
+            const left = Math.min(startX, endX);
+            const top = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            selectionBox.style.left = left + 'px';
+            selectionBox.style.top = top + 'px';
+            selectionBox.style.width = width + 'px';
+            selectionBox.style.height = height + 'px';
+        }
+        
+        // Gestionnaire de clic pour commencer la sélection
+        function startSelection(e) {
+            isSelecting = true;
+            startX = e.clientX || e.touches[0].clientX;
+            startY = e.clientY || e.touches[0].clientY;
+            
+            selectionBox.style.display = 'block';
+            selectionBox.style.left = startX + 'px';
+            selectionBox.style.top = startY + 'px';
+            selectionBox.style.width = '0px';
+            selectionBox.style.height = '0px';
+        }
+        
+        // Gestionnaire de mouvement pour redimensionner la sélection
+        function updateSelection(e) {
+            if (!isSelecting) return;
+            
+            e.preventDefault();
+            endX = e.clientX || e.touches[0].clientX;
+            endY = e.clientY || e.touches[0].clientY;
+            
+            updateSelectionBox();
+        }
+        
+        // Gestionnaire de relâchement pour finaliser la sélection
+        async function endSelection(e) {
+            if (!isSelecting) return;
+            
+            isSelecting = false;
+            
+            // Vérifier que la sélection a une taille minimale
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            if (width < 50 || height < 50) {
+                showToast('Sélection trop petite, essayez de sélectionner une zone plus grande', 'warning');
+                return;
+            }
+            
+            // Masquer l'overlay
+            document.body.removeChild(overlay);
+            
+            // Capturer la zone sélectionnée
+            await captureSelectedZone(targetElement, startX, startY, endX, endY);
+            resolve();
+        }
+        
+        // Événements souris
+        overlay.addEventListener('mousedown', startSelection);
+        overlay.addEventListener('mousemove', updateSelection);
+        overlay.addEventListener('mouseup', endSelection);
+        
+        // Événements tactiles
+        overlay.addEventListener('touchstart', startSelection, { passive: false });
+        overlay.addEventListener('touchmove', updateSelection, { passive: false });
+        overlay.addEventListener('touchend', endSelection, { passive: false });
+        
+        // Gestionnaire d'échappement pour annuler
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                document.body.removeChild(overlay);
+                document.removeEventListener('keydown', handleEscape);
+                showToast('Sélection annulée', 'info');
+                resolve();
+            }
+        };
+        
+        document.addEventListener('keydown', handleEscape);
+        
+        // Instructions visuelles
+        const instructions = document.createElement('div');
+        instructions.className = 'zone-selection-instructions';
+        instructions.innerHTML = `
+            <i class="fas fa-mouse-pointer"></i> Cliquez et glissez pour sélectionner la zone à traduire<br>
+            <i class="fas fa-keyboard"></i> Appuyez sur Échap pour annuler
+        `;
+        overlay.appendChild(instructions);
+    });
+}
+
+// Capturer la zone sélectionnée
+async function captureSelectedZone(targetElement, startX, startY, endX, endY) {
+    try {
+        showToast('Capture de la zone sélectionnée...', 'info');
+        
+        // Capturer l'écran complet avec html2canvas
         const canvas = await html2canvas(targetElement, {
             useCORS: true,
             allowTaint: true,
@@ -2572,12 +2727,42 @@ async function captureAndTranslate() {
             logging: false
         });
         
+        // Calculer les coordonnées relatives à l'élément cible
+        const targetRect = targetElement.getBoundingClientRect();
+        const relativeStartX = (startX - targetRect.left) * 2; // *2 pour le scale
+        const relativeStartY = (startY - targetRect.top) * 2;
+        const relativeEndX = (endX - targetRect.left) * 2;
+        const relativeEndY = (endY - targetRect.top) * 2;
+        
+        // Créer un nouveau canvas avec la zone sélectionnée
+        const croppedCanvas = document.createElement('canvas');
+        const croppedCtx = croppedCanvas.getContext('2d');
+        
+        const cropWidth = Math.abs(relativeEndX - relativeStartX);
+        const cropHeight = Math.abs(relativeEndY - relativeStartY);
+        
+        croppedCanvas.width = cropWidth;
+        croppedCanvas.height = cropHeight;
+        
+        // Dessiner la zone sélectionnée
+        croppedCtx.drawImage(
+            canvas,
+            Math.min(relativeStartX, relativeEndX),
+            Math.min(relativeStartY, relativeEndY),
+            cropWidth,
+            cropHeight,
+            0,
+            0,
+            cropWidth,
+            cropHeight
+        );
+        
         showToast('Analyse du texte en cours...', 'info');
         
         // Convertir en blob et envoyer
-        canvas.toBlob(async (blob) => {
+        croppedCanvas.toBlob(async (blob) => {
             if (!blob) {
-                showToast('Erreur lors de la capture d\'écran', 'error');
+                showToast('Erreur lors de la capture de la zone', 'error');
                 return;
             }
             
@@ -2610,8 +2795,8 @@ async function captureAndTranslate() {
         }, 'image/png');
         
     } catch (error) {
-        console.error('Capture error:', error);
-        showToast('Erreur lors de la capture d\'écran', 'error');
+        console.error('Zone capture error:', error);
+        showToast('Erreur lors de la capture de la zone', 'error');
     }
 }
 
@@ -2632,63 +2817,44 @@ function displayTranslationSuggestionsInBlock(data) {
         lastBlockIndex = blocks.length - 1;
     }
     
-    // Obtenir le conteneur du bloc
-    const blockElements = document.querySelectorAll('.block');
-    if (lastBlockIndex >= blockElements.length) {
-        showToast('Erreur: bloc introuvable', 'error');
-        return;
+    // Stocker les suggestions dans aiMap pour qu'elles persistent
+    if (!aiMap[lastBlockIndex]) {
+        aiMap[lastBlockIndex] = {};
     }
     
-    const blockElement = blockElements[lastBlockIndex];
-    const suggestionsContainer = blockElement.querySelector('.suggestions');
+    // Préparer les suggestions avec le texte OCR
+    let suggestions = [];
     
-    // Vider les suggestions existantes
-    suggestionsContainer.innerHTML = '';
-    
-    // Afficher le texte OCR détecté
-    if (data.ocr) {
-        const ocrDiv = document.createElement('div');
-        ocrDiv.className = 'ocr-text';
-        ocrDiv.innerHTML = `<strong>Texte détecté (${data.sourceLang}):</strong><br>${data.ocr}`;
-        suggestionsContainer.appendChild(ocrDiv);
+    // Ajouter le texte OCR comme première suggestion si disponible
+    if (data.ocr && data.ocr.trim()) {
+        suggestions.push(`[OCR: ${data.ocr}]`);
     }
     
-    // Afficher les suggestions
+    // Ajouter les suggestions de traduction
     if (data.suggestions && data.suggestions.length > 0) {
-        data.suggestions.forEach((suggestion, index) => {
-            const suggestionDiv = document.createElement('div');
-            suggestionDiv.className = 'suggestion-item';
-            suggestionDiv.textContent = suggestion;
-            suggestionDiv.addEventListener('click', () => {
-                // Remplacer le contenu du bloc par la suggestion
-                const textarea = blockElement.querySelector('textarea');
-                textarea.value = suggestion;
-                textarea.focus();
-                
-                // Masquer les suggestions
-                suggestionsContainer.style.display = 'none';
-                
-                // Sauvegarder les changements
-                saveData();
-                
-                showToast('Suggestion appliquée au bloc', 'success');
-            });
-            suggestionsContainer.appendChild(suggestionDiv);
-        });
-    } else {
-        const noSuggestionsDiv = document.createElement('div');
-        noSuggestionsDiv.className = 'suggestion-item';
-        noSuggestionsDiv.textContent = 'Aucune suggestion disponible';
-        noSuggestionsDiv.style.cursor = 'default';
-        noSuggestionsDiv.style.opacity = '0.6';
-        suggestionsContainer.appendChild(noSuggestionsDiv);
+        suggestions = suggestions.concat(data.suggestions);
     }
     
-    // Afficher les suggestions
-    suggestionsContainer.style.display = 'block';
+    // Si aucune suggestion, ajouter un message
+    if (suggestions.length === 0) {
+        suggestions.push('Aucune suggestion disponible');
+    }
+    
+    // Stocker les suggestions
+    aiMap[lastBlockIndex].suggestions = suggestions;
+    aiMap[lastBlockIndex].sourceLang = data.sourceLang || 'unknown';
+    aiMap[lastBlockIndex].ocrText = data.ocr || '';
+    
+    // Re-rendre les blocs pour afficher les suggestions
+    renderBlocks();
     
     // Faire défiler vers le bloc
-    blockElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const blockElements = document.querySelectorAll('.block');
+    if (lastBlockIndex < blockElements.length) {
+        blockElements[lastBlockIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    
+    showToast(`Suggestions ajoutées au bloc ${blocks[lastBlockIndex].type}${blocks[lastBlockIndex].number}`, 'success');
 }
 
 // Initialize app when DOM is loaded
