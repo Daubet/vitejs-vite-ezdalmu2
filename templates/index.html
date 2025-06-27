@@ -11,6 +11,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- PDF.js -->
     <script src="{{ url_for('static', filename='js/lib/pdf.min.js') }}"></script>
+    <!-- html2canvas pour la capture d'écran -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
     <div class="app">
@@ -88,6 +90,7 @@
                     <button id="btn-next-page" class="btn-icon" disabled><i class="fas fa-chevron-right"></i></button>
                     <button id="btn-zoom-in" class="btn-icon"><i class="fas fa-search-plus"></i></button>
                     <button id="btn-zoom-out" class="btn-icon"><i class="fas fa-search-minus"></i></button>
+                    <button id="btn-translate-ai" class="btn-icon" title="Traduire avec IA"><i class="fas fa-language"></i></button>
                 </div>
             </div>
             

@@ -24,6 +24,8 @@ import datetime
 import hashlib
 import atexit
 import signal
+import pytesseract
+import langdetect
 
 # Clé API Firecrawl par défaut
 FIRECRAWL_API_KEY = 'fc-4e2ef9d083654a49ab17a5dc27888c03'
@@ -577,6 +579,8 @@ async def download_image(session, url, filepath, index, referer_url=None):
                         await f.write(content)
                     
                     logging.info(f"Successfully downloaded: {filepath}")
+                    saved_filename = os.path.basename(filepath)
+                    saved_path = filepath
                 
                 return {
                     'filename': saved_filename,
@@ -1084,8 +1088,9 @@ def api_import_zip():
             logging.error("Nom de fichier vide")
             return jsonify({"error": "Empty filename", "details": "Le nom du fichier est vide"}), 400
         
-        # Accepter tous les types de ZIP (pas seulement les .zip, mais aussi .wtoon)
-        if not (up.filename.lower().endswith('.zip') or up.filename.lower().endswith('.wtoon')):
+        # Vérifier le type de fichier
+        allowed_extensions = {'.zip', '.wtoon'}
+        if not any(up.filename.endswith(ext) for ext in allowed_extensions):
             logging.error(f"Extension non valide: {up.filename}")
             return jsonify({"error": "Need a .zip or .wtoon file"}), 400
     except Exception as e:
@@ -1250,6 +1255,130 @@ def api_import_zip():
             "details": str(e),
             "type": type(e).__name__
         }), 500
+
+@app.route('/api/ocr-translate', methods=['POST'])
+def api_ocr_translate():
+    """Route pour OCR + traduction d'images"""
+    if 'image' not in request.files:
+        return jsonify({"error": "No image field"}), 400
+    
+    img_file = request.files['image']
+    if img_file.filename == '':
+        return jsonify({"error": "Empty filename"}), 400
+
+    try:
+        # Ouvrir et redimensionner l'image si nécessaire
+        img = Image.open(img_file.stream).convert("RGB")
+        
+        # Redimensionner si l'image est trop grande (optimisation)
+        max_size = (2000, 2000)
+        if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
+            img.thumbnail(max_size, Image.Resampling.LANCZOS)
+            logging.info(f"Image redimensionnée à {img.size}")
+        
+        # 1) OCR (auto-langue)
+        try:
+            # Spécifier le chemin de Tesseract pour Windows
+            tesseract_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+            if os.path.exists(tesseract_path):
+                pytesseract.pytesseract.tesseract_cmd = tesseract_path
+            
+            raw_text = pytesseract.image_to_string(img, lang="eng+fra+jpn+kor")
+            raw_text = raw_text.strip()
+            if not raw_text:
+                return jsonify({"error": "OCR found no text"})
+        except Exception as ocr_error:
+            logging.error(f"OCR error: {str(ocr_error)}")
+            return jsonify({"error": "OCR failed", "details": str(ocr_error)}), 500
+        
+        # 2) Détection langue pour info
+        try:
+            detected = langdetect.detect(raw_text)
+        except Exception:
+            detected = "unknown"
+
+        # 3) Traduction via Gemini
+        api_key = load_data().get('api_keys', {}).get('gemini', '')
+        if not api_key:
+            return jsonify({"error": "Missing Gemini key"})
+        
+        prompt = f"""Traduits en français.
+Donne 3 variantes courtes, sans parenthèses ni explication :
+« {raw_text} »"""
+        
+        try:
+            r = requests.post(
+                f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}',
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.8, "candidateCount": 1}
+                },
+                timeout=30
+            )
+            
+            if r.status_code != 200:
+                return jsonify({"error": "Gemini error", "details": r.text}), 502
+
+            txt = r.json()['candidates'][0]['content']['parts'][0]['text']
+            sug = [l.strip().lstrip("•-0123456789. ").split('(', 1)[0].strip()
+                   for l in txt.split('\n') if l.strip()]
+            
+            return jsonify({
+                "status": "success",
+                "sourceLang": detected,
+                "ocr": raw_text,
+                "suggestions": sug[:3]
+            })
+        except Exception as gemini_error:
+            logging.error(f"Gemini API error: {str(gemini_error)}")
+            return jsonify({"error": "Translation failed", "details": str(gemini_error)}), 500
+            
+    except Exception as e:
+        logging.exception("OCR-Translate failed")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/upload-reader', methods=['POST'])
+def api_upload_reader():
+    """Route pour uploader des fichiers dans le lecteur (PDF et images)"""
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+        
+    file = request.files['file']
+    
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+    
+    # Vérifier le type de fichier
+    allowed_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+    if file.filename:
+        file_ext = os.path.splitext(file.filename)[1].lower()
+    else:
+        return jsonify({"error": "Nom de fichier invalide"}), 400
+    
+    if file_ext not in allowed_extensions:
+        return jsonify({"error": f"Type de fichier non supporté. Extensions autorisées: {', '.join(allowed_extensions)}"}), 400
+        
+    if file and file.filename:
+        # Create a unique filename
+        filename = secure_filename(file.filename)
+        unique_filename = f"reader_{uuid.uuid4()}{file_ext}"
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+        
+        # Save the file
+        file.save(file_path)
+        
+        # Return the path to access the file
+        file_url = url_for('serve_upload', fname=unique_filename)
+        
+        return jsonify({
+            "status": "success",
+            "filename": filename,
+            "path": file_path,
+            "url": file_url,
+            "type": "pdf" if file_ext == '.pdf' else "image"
+        })
+    
+    return jsonify({"error": "Failed to upload file"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True) 

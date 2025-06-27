@@ -50,6 +50,9 @@ const extractionStatus = document.getElementById('extraction-status');
 const extractionProgress = document.getElementById('extraction-progress');
 const extractedImagesContainer = document.getElementById('extracted-images-container');
 const extractedImageTemplate = document.getElementById('extracted-image-template');
+const btnTranslateAi = document.getElementById('btn-translate-ai');
+const translationSuggestions = document.getElementById('translation-suggestions');
+const suggestionsContainer = document.getElementById('suggestions-container');
 
 // Initialize app
 function init() {
@@ -194,6 +197,9 @@ function setupEventListeners() {
             '<i class="fas fa-eye-slash"></i>' : 
             '<i class="fas fa-eye"></i>';
     });
+    
+    // Translation AI button
+    btnTranslateAi.addEventListener('click', captureAndTranslate);
 }
 
 // Handle keyboard shortcuts
@@ -235,7 +241,7 @@ function showToast(message, type = 'info', duration = 3000) {
             toast.appendChild(lineEl);
         });
     } else {
-        toast.textContent = message;
+    toast.textContent = message;
     }
     
     document.body.appendChild(toast);
@@ -402,7 +408,7 @@ function handlePDFUpload(e) {
     const formData = new FormData();
     formData.append('file', file);
     
-    fetch('/api/upload', {
+    fetch('/api/upload-reader', {
         method: 'POST',
         body: formData
     })
@@ -452,7 +458,7 @@ function handleImageUpload(e) {
     const formData = new FormData();
     formData.append('file', file);
     
-    fetch('/api/upload', {
+    fetch('/api/upload-reader', {
         method: 'POST',
         body: formData
     })
@@ -1004,14 +1010,14 @@ async function exportZip() {
         // Call the backend endpoint to create the ZIP
         const response = await fetch('/api/export-zip');
         
-        if (!response.ok) {
+                if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Erreur de serveur');
-        }
-        
+                }
+                
         // Get the ZIP file as a blob
-        const blob = await response.blob();
-        
+                const blob = await response.blob();
+                
         // Create a URL for the blob
         const url = URL.createObjectURL(blob);
         
@@ -1135,15 +1141,15 @@ async function importZipProject(file) {
         }
         
         // Create form data with the ZIP file
-        const formData = new FormData();
+                const formData = new FormData();
         formData.append('file', file);
-        
+                
         // Send the ZIP file to the new backend endpoint
         const response = await fetch('/api/import-zip', {
-            method: 'POST',
-            body: formData
-        });
-        
+                    method: 'POST',
+                    body: formData
+                });
+                
         // Vérifier d'abord si c'est une erreur 413 (entité trop grande)
         if (response.status === 413) {
             throw new Error(`Le fichier est trop volumineux pour le serveur. La limite est de 90 MB. 
@@ -1233,11 +1239,11 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
                     // Mettre à jour les informations sur le statut de l'extraction
                     const nombreImages = data.images ? data.images.length : 0;
                     extractionStatus.textContent = `${nombreImages} images importées avec succès`;
-                    extractionStatus.className = 'status-message success';
-                    
+        extractionStatus.className = 'status-message success';
+        
                     // Ouvrir le panel du projet et afficher la section extraction
-                    projectSidebar.setAttribute('data-visible', 'true');
-                    
+        projectSidebar.setAttribute('data-visible', 'true');
+        
                     // Afficher une notification
                     showToast(`Import réussi : ${blocks.length} blocs et ${nombreImages} images.`, 'success');
                 } catch (error) {
@@ -1247,15 +1253,15 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
             }
         
         // Reset history and update UI
-        history = [];
-        aiMap = {};
+    history = [];
+    aiMap = {};
         
         // Don't call loadData() as we already have the project data from the response
         saveData(); // Save the new data to server
-        renderBlocks();
-        renderBlockTypeButtons();
-        updateBlockCount();
-        document.getElementById('btn-undo').disabled = true;
+    renderBlocks();
+    renderBlockTypeButtons();
+    updateBlockCount();
+    document.getElementById('btn-undo').disabled = true;
         
     } catch (error) {
         console.error('Error importing ZIP:', error);
@@ -2070,11 +2076,11 @@ function displayExtractedImages(images) {
     
     images.forEach((image, index) => {
         try {
-            // Clone the template
-            const imageElement = extractedImageTemplate.content.cloneNode(true);
-            
+        // Clone the template
+        const imageElement = extractedImageTemplate.content.cloneNode(true);
+        
             // Set image source with error handling
-            const thumbnail = imageElement.querySelector('.thumbnail');
+        const thumbnail = imageElement.querySelector('.thumbnail');
             
             // Définir un gestionnaire d'erreur avant de définir la source
             thumbnail.onerror = function() {
@@ -2084,22 +2090,22 @@ function displayExtractedImages(images) {
                 this.alt = 'Image introuvable';
             };
             
-            thumbnail.src = image.url;
+        thumbnail.src = image.url;
             thumbnail.alt = image.filename || `Image ${index + 1}`;
-            
-            // Add event listener to the view button
-            const viewBtn = imageElement.querySelector('.view-btn');
-            viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
-            viewBtn.addEventListener('click', () => {
-                showExtractedImage(image, index);
-            });
-            
-            // Remove the use button as it's redundant
-            const useBtn = imageElement.querySelector('.use-btn');
-            if (useBtn) {
-                useBtn.remove();
-            }
-            
+        
+        // Add event listener to the view button
+        const viewBtn = imageElement.querySelector('.view-btn');
+        viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
+        viewBtn.addEventListener('click', () => {
+            showExtractedImage(image, index);
+        });
+        
+        // Remove the use button as it's redundant
+        const useBtn = imageElement.querySelector('.use-btn');
+        if (useBtn) {
+            useBtn.remove();
+        }
+        
             // Add to fragment (plus efficace pour de nombreux éléments)
             fragment.appendChild(imageElement);
         } catch (error) {
@@ -2525,6 +2531,164 @@ async function downloadExampleZip() {
         console.error('Erreur:', error);
         showToast('Erreur lors du téléchargement de l\'exemple', 'error');
     }
+}
+
+// Capture d'écran et traduction IA
+async function captureAndTranslate() {
+    try {
+        // Vérifier si le lecteur est ouvert
+        if (viewerPanel.classList.contains('hidden')) {
+            showToast('Ouvrez d\'abord un fichier dans le lecteur', 'warning');
+            return;
+        }
+        
+        // Vérifier si la clé Gemini est configurée
+        if (!geminiKey) {
+            showToast('Configurez d\'abord votre clé Gemini dans les outils', 'warning');
+            return;
+        }
+        
+        showToast('Capture d\'écran en cours...', 'info');
+        
+        // Déterminer quelle zone capturer
+        let targetElement;
+        if (currentPDFDoc) {
+            // Si c'est un PDF, capturer le conteneur PDF
+            targetElement = pdfContainer;
+        } else if (imageViewer.style.display !== 'none') {
+            // Si c'est une image, capturer le conteneur d'image
+            targetElement = imageContainer;
+        } else {
+            showToast('Aucun contenu à capturer', 'warning');
+            return;
+        }
+        
+        // Capturer l'écran avec html2canvas
+        const canvas = await html2canvas(targetElement, {
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            scale: 2, // Haute résolution pour un meilleur OCR
+            logging: false
+        });
+        
+        showToast('Analyse du texte en cours...', 'info');
+        
+        // Convertir en blob et envoyer
+        canvas.toBlob(async (blob) => {
+            if (!blob) {
+                showToast('Erreur lors de la capture d\'écran', 'error');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('image', blob, 'capture.png');
+            
+            try {
+                const response = await fetch('/api/ocr-translate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Erreur lors de la traduction');
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    displayTranslationSuggestionsInBlock(data);
+                    showToast('Traduction terminée !', 'success');
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                console.error('Translation error:', error);
+                showToast(`Erreur: ${error.message}`, 'error');
+            }
+        }, 'image/png');
+        
+    } catch (error) {
+        console.error('Capture error:', error);
+        showToast('Erreur lors de la capture d\'écran', 'error');
+    }
+}
+
+// Afficher les suggestions de traduction dans le dernier bloc
+function displayTranslationSuggestionsInBlock(data) {
+    // Trouver le dernier bloc de texte (pas un commentaire)
+    let lastBlockIndex = -1;
+    for (let i = blocks.length - 1; i >= 0; i--) {
+        if (blocks[i].type !== 'C' && blocks[i].type !== 'HC') {
+            lastBlockIndex = i;
+            break;
+        }
+    }
+    
+    // Si aucun bloc trouvé, créer un nouveau bloc
+    if (lastBlockIndex === -1) {
+        addBlock('B');
+        lastBlockIndex = blocks.length - 1;
+    }
+    
+    // Obtenir le conteneur du bloc
+    const blockElements = document.querySelectorAll('.block');
+    if (lastBlockIndex >= blockElements.length) {
+        showToast('Erreur: bloc introuvable', 'error');
+        return;
+    }
+    
+    const blockElement = blockElements[lastBlockIndex];
+    const suggestionsContainer = blockElement.querySelector('.suggestions');
+    
+    // Vider les suggestions existantes
+    suggestionsContainer.innerHTML = '';
+    
+    // Afficher le texte OCR détecté
+    if (data.ocr) {
+        const ocrDiv = document.createElement('div');
+        ocrDiv.className = 'ocr-text';
+        ocrDiv.innerHTML = `<strong>Texte détecté (${data.sourceLang}):</strong><br>${data.ocr}`;
+        suggestionsContainer.appendChild(ocrDiv);
+    }
+    
+    // Afficher les suggestions
+    if (data.suggestions && data.suggestions.length > 0) {
+        data.suggestions.forEach((suggestion, index) => {
+            const suggestionDiv = document.createElement('div');
+            suggestionDiv.className = 'suggestion-item';
+            suggestionDiv.textContent = suggestion;
+            suggestionDiv.addEventListener('click', () => {
+                // Remplacer le contenu du bloc par la suggestion
+                const textarea = blockElement.querySelector('textarea');
+                textarea.value = suggestion;
+                textarea.focus();
+                
+                // Masquer les suggestions
+                suggestionsContainer.style.display = 'none';
+                
+                // Sauvegarder les changements
+                saveData();
+                
+                showToast('Suggestion appliquée au bloc', 'success');
+            });
+            suggestionsContainer.appendChild(suggestionDiv);
+        });
+    } else {
+        const noSuggestionsDiv = document.createElement('div');
+        noSuggestionsDiv.className = 'suggestion-item';
+        noSuggestionsDiv.textContent = 'Aucune suggestion disponible';
+        noSuggestionsDiv.style.cursor = 'default';
+        noSuggestionsDiv.style.opacity = '0.6';
+        suggestionsContainer.appendChild(noSuggestionsDiv);
+    }
+    
+    // Afficher les suggestions
+    suggestionsContainer.style.display = 'block';
+    
+    // Faire défiler vers le bloc
+    blockElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 // Initialize app when DOM is loaded

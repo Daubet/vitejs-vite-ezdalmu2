@@ -947,25 +947,21 @@ hr {
 
 /* PDF scroll container for continuous mode */
 .pdf-scroll-container {
-    padding: 15px;
-    width: 100%;
-    height: auto;
     display: flex;
     flex-direction: column;
-    align-items: center;
+    gap: 20px;
+    padding: 20px;
 }
 
 /* Styles for each PDF page wrapper */
 .pdf-page-wrapper {
-    position: relative;
-    margin-bottom: 20px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    background: white;
     display: flex;
-    justify-content: center;
-    width: fit-content;
-    max-width: 100%;
-    padding: 0;
+    flex-direction: column;
+    align-items: center;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
 }
 
 .pdf-page-wrapper canvas {
@@ -976,15 +972,12 @@ hr {
 
 /* Page label indicator */
 .pdf-page-label {
-    position: absolute;
-    bottom: 10px;
-    right: 10px;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.7);
     color: white;
-    padding: 3px 8px;
-    border-radius: var(--radius);
+    padding: 4px 12px;
+    border-radius: 12px;
     font-size: 0.8rem;
-    pointer-events: none;
+    margin: 8px 0;
 }
 
 .viewer-content::-webkit-scrollbar {
@@ -1041,22 +1034,16 @@ hr {
 
 #image-container {
     display: flex;
-    align-items: flex-start;
     justify-content: center;
-    height: 100%;
-    width: 100%;
+    align-items: flex-start;
+    min-height: 200px;
     overflow: auto;
-    position: relative;
-    background-color: #1a1a1a;
 }
 
 #image-viewer {
     max-width: 100%;
     height: auto;
-    object-fit: contain;
     transition: transform 0.2s ease;
-    transform-origin: center top;
-    display: block;
 }
 
 /* Special class for webtoon format images */
@@ -1518,4 +1505,52 @@ hr {
 
 .image-container::-webkit-scrollbar-thumb:hover {
     background-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Translation suggestions */
+.translation-suggestions {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    padding: 1rem;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.translation-suggestions h4 {
+    margin: 0 0 0.5rem 0;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.suggestion-item {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.suggestion-item:hover {
+    background: var(--accent-color);
+    color: white;
+    border-color: var(--accent-color);
+}
+
+.suggestion-item:last-child {
+    margin-bottom: 0;
+}
+
+.ocr-text {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-style: italic;
 } 
