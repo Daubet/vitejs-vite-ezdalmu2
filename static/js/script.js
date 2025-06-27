@@ -15,6 +15,12 @@ let currentPage = 1;
 let totalPages = 0;
 let currentZoom = 1.0;
 
+// Variables pour la reformulation intelligente
+let currentReformulationBlockIndex = -1;
+let currentReformulationContent = '';
+let currentReformulationIntention = '';
+let currentReformulationCustom = '';
+
 // DOM references
 const blocksContainer = document.getElementById('blocks-container');
 const blockTypesButtons = document.getElementById('block-types-buttons');
@@ -198,8 +204,44 @@ function setupEventListeners() {
             '<i class="fas fa-eye"></i>';
     });
     
+    // Gestionnaires pour les modals de reformulation
+    setupReformulationModalHandlers();
+    
     // Translation AI button
     btnTranslateAi.addEventListener('click', captureAndTranslate);
+}
+
+// Configurer les gestionnaires pour les modals de reformulation
+function setupReformulationModalHandlers() {
+    // Fermer les modals avec Échap
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const reformulationModal = document.getElementById('reformulation-modal');
+            const resultsModal = document.getElementById('reformulation-results-modal');
+            
+            if (reformulationModal && !reformulationModal.classList.contains('hidden')) {
+                closeReformulationModal();
+            } else if (resultsModal && !resultsModal.classList.contains('hidden')) {
+                closeReformulationResultsModal();
+            }
+        }
+    });
+    
+    // Fermer les modals en cliquant à l'extérieur
+    document.addEventListener('click', (e) => {
+        const reformulationModal = document.getElementById('reformulation-modal');
+        const resultsModal = document.getElementById('reformulation-results-modal');
+        
+        if (reformulationModal && !reformulationModal.classList.contains('hidden')) {
+            if (e.target === reformulationModal) {
+                closeReformulationModal();
+            }
+        } else if (resultsModal && !resultsModal.classList.contains('hidden')) {
+            if (e.target === resultsModal) {
+                closeReformulationResultsModal();
+            }
+        }
+    });
 }
 
 // Handle keyboard shortcuts
@@ -1595,49 +1637,266 @@ async function spellCheck() {
 // Ask AI for suggestions
 async function askAi(blockIndex) {
     const block = blocks[blockIndex];
-    if (!block || !block.content) {
-        showToast('Aucun contenu à améliorer', 'error');
+    if (!block || !block.content.trim()) {
+        showToast('Le bloc doit contenir du texte pour être reformulé', 'warning');
         return;
     }
     
-    const key = geminiKeyInput.value.trim();
-    if (!key) {
-        showToast('Clé Gemini requise', 'error');
-        toggleToolsSidebar(true);
-        geminiKeyInput.focus();
+    if (!geminiKey) {
+        showToast('Configurez d\'abord votre clé Gemini dans les outils', 'warning');
         return;
     }
     
-    const blockEl = blocksContainer.children[blockIndex];
-    const suggestionsEl = blockEl.querySelector('.suggestions');
-    suggestionsEl.innerHTML = '<div class="ai-loading"><i class="fas fa-spinner fa-spin"></i> Génération en cours...</div>';
-    suggestionsEl.style.display = 'block';
+    // Stocker les informations pour la reformulation
+    currentReformulationBlockIndex = blockIndex;
+    currentReformulationContent = block.content;
+    currentReformulationIntention = '';
+    currentReformulationCustom = '';
     
-    try {
-        const response = await fetch('/api/gemini', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ api_key: key, content: block.content })
+    // Ouvrir le modal de sélection d'intention
+    openReformulationModal();
+}
+
+// Ouvrir le modal de sélection d'intention
+function openReformulationModal() {
+    const modal = document.getElementById('reformulation-modal');
+    const generateBtn = document.getElementById('generate-reformulation');
+    const customTextarea = document.getElementById('custom-intention');
+    
+    // Réinitialiser l'interface
+    document.querySelectorAll('.intention-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    customTextarea.value = '';
+    generateBtn.disabled = true;
+    
+    // Afficher le modal
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+    
+    // Supprimer les anciens gestionnaires d'événements
+    document.querySelectorAll('.intention-option').forEach(option => {
+        option.removeEventListener('click', handleIntentionClick);
+    });
+    
+    // Ajouter les nouveaux gestionnaires d'événements pour les options
+    document.querySelectorAll('.intention-option').forEach(option => {
+        option.addEventListener('click', handleIntentionClick);
+    });
+    
+    // Gestionnaire pour le textarea personnalisé
+    customTextarea.removeEventListener('input', handleCustomIntention);
+    customTextarea.addEventListener('input', handleCustomIntention);
+    
+    // Gestionnaire pour le bouton générer
+    generateBtn.removeEventListener('click', generateReformulation);
+    generateBtn.addEventListener('click', generateReformulation);
+}
+
+// Gestionnaire pour le clic sur une option d'intention
+function handleIntentionClick(event) {
+    const option = event.currentTarget;
+    selectIntention(option);
+}
+
+// Gestionnaire pour le textarea personnalisé
+function handleCustomIntention(event) {
+    const customTextarea = event.target;
+    const customOption = document.querySelector('[data-intention="custom"]');
+    const generateBtn = document.getElementById('generate-reformulation');
+    
+    if (customTextarea.value.trim()) {
+        // Désélectionner toutes les autres options
+        document.querySelectorAll('.intention-option').forEach(option => {
+            if (option !== customOption) {
+                option.classList.remove('selected');
+            }
         });
         
-        if (response.ok) {
-            const data = await response.json();
-            
-            if (data.suggestions && data.suggestions.length) {
-                aiMap[blockIndex] = { suggestions: data.suggestions };
-                renderSuggestions(suggestionsEl, data.suggestions, blockIndex);
-            } else if (data.error) {
-                suggestionsEl.innerHTML = `<p class="error"><i class="fas fa-exclamation-triangle"></i> ${data.error}</p>`;
-            } else {
-                suggestionsEl.innerHTML = '<p class="error"><i class="fas fa-exclamation-triangle"></i> Aucune suggestion générée</p>';
-            }
-        } else {
-            suggestionsEl.innerHTML = '<p class="error"><i class="fas fa-exclamation-triangle"></i> Erreur de connexion</p>';
+        customOption.classList.add('selected');
+        currentReformulationIntention = 'custom';
+        currentReformulationCustom = customTextarea.value.trim();
+        generateBtn.disabled = false;
+    } else {
+        customOption.classList.remove('selected');
+        if (currentReformulationIntention === 'custom') {
+            currentReformulationIntention = '';
+            generateBtn.disabled = true;
         }
-    } catch (error) {
-        console.error('Failed to get AI suggestions:', error);
-        suggestionsEl.innerHTML = '<p class="error"><i class="fas fa-exclamation-triangle"></i> Erreur de connexion</p>';
     }
+}
+
+// Sélectionner une intention
+function selectIntention(optionElement) {
+    // Désélectionner toutes les options
+    document.querySelectorAll('.intention-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    
+    // Sélectionner l'option cliquée
+    optionElement.classList.add('selected');
+    
+    // Mettre à jour les variables
+    currentReformulationIntention = optionElement.dataset.intention;
+    currentReformulationCustom = '';
+    
+    // Vider le textarea personnalisé si on sélectionne une autre option
+    if (currentReformulationIntention !== 'custom') {
+        const customTextarea = document.getElementById('custom-intention');
+        customTextarea.value = '';
+    }
+    
+    // Activer le bouton générer
+    const generateBtn = document.getElementById('generate-reformulation');
+    generateBtn.disabled = false;
+    
+    // Focus sur le textarea si c'est l'option personnalisée
+    if (currentReformulationIntention === 'custom') {
+        const customTextarea = document.getElementById('custom-intention');
+        customTextarea.focus();
+    }
+    
+    // Feedback visuel
+    showToast(`Intention sélectionnée : ${optionElement.querySelector('h4').textContent}`, 'info');
+}
+
+// Générer la reformulation
+async function generateReformulation() {
+    if (!currentReformulationIntention) {
+        showToast('Sélectionnez une intention de reformulation', 'warning');
+        return;
+    }
+    
+    const generateBtn = document.getElementById('generate-reformulation');
+    const originalText = generateBtn.innerHTML;
+    
+    try {
+        // Afficher le spinner
+        generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
+        generateBtn.disabled = true;
+        
+        // Appeler l'API de reformulation
+        const response = await fetch('/api/reformulate', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                api_key: geminiKey,
+                content: currentReformulationContent,
+                intention: currentReformulationIntention,
+                custom_intention: currentReformulationCustom
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Erreur lors de la reformulation');
+        }
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            // Fermer le modal de sélection
+            closeReformulationModal();
+            
+            // Afficher les résultats
+            displayReformulationResults(data.suggestions);
+        } else {
+            throw new Error(data.error || 'Erreur inconnue');
+        }
+        
+    } catch (error) {
+        console.error('Reformulation error:', error);
+        showToast(`Erreur: ${error.message}`, 'error');
+    } finally {
+        // Restaurer le bouton
+        generateBtn.innerHTML = originalText;
+        generateBtn.disabled = false;
+    }
+}
+
+// Afficher les résultats de reformulation
+function displayReformulationResults(suggestions) {
+    const modal = document.getElementById('reformulation-results-modal');
+    const resultsContainer = document.getElementById('reformulation-results');
+    const template = document.getElementById('reformulation-suggestion-template');
+    
+    // Vider le conteneur
+    resultsContainer.innerHTML = '';
+    
+    // Ajouter chaque suggestion
+    suggestions.forEach((suggestion, index) => {
+        const suggestionElement = document.importNode(template.content, true).firstElementChild;
+        const contentDiv = suggestionElement.querySelector('.suggestion-content');
+        const applyBtn = suggestionElement.querySelector('.suggestion-apply');
+        
+        contentDiv.textContent = suggestion;
+        
+        // Gestionnaire pour appliquer la suggestion
+        applyBtn.addEventListener('click', () => {
+            applyReformulationSuggestion(suggestion);
+        });
+        
+        resultsContainer.appendChild(suggestionElement);
+    });
+    
+    // Gestionnaire pour régénérer
+    document.getElementById('regenerate-reformulation').addEventListener('click', () => {
+        closeReformulationResultsModal();
+        openReformulationModal();
+    });
+    
+    // Afficher le modal
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+}
+
+// Appliquer une suggestion de reformulation
+function applyReformulationSuggestion(suggestion) {
+    if (currentReformulationBlockIndex >= 0 && currentReformulationBlockIndex < blocks.length) {
+        pushHistory();
+        blocks[currentReformulationBlockIndex].content = suggestion;
+        saveData();
+        renderBlocks();
+        
+        // Fermer le modal des résultats
+        closeReformulationResultsModal();
+        
+        // Faire défiler vers le bloc modifié
+        const blockElements = document.querySelectorAll('.block');
+        if (currentReformulationBlockIndex < blockElements.length) {
+            blockElements[currentReformulationBlockIndex].scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center' 
+            });
+        }
+        
+        document.getElementById('btn-undo').disabled = false;
+        showToast('Reformulation appliquée', 'success');
+    }
+}
+
+// Fermer le modal de sélection d'intention
+function closeReformulationModal() {
+    const modal = document.getElementById('reformulation-modal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 300);
+}
+
+// Fermer le modal des résultats
+function closeReformulationResultsModal() {
+    const modal = document.getElementById('reformulation-results-modal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 300);
 }
 
 // Accept AI suggestion

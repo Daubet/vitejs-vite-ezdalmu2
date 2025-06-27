@@ -17,6 +17,20 @@
     --success: #38a169;
     --success-rgb: 56, 161, 105; /* Version RGB pour les transparences */
     --viewer-width: 40%; /* Default viewer width */
+    --primary-color: #007bff;
+    --primary-color-light: rgba(0, 123, 255, 0.1);
+    --secondary-color: #6c757d;
+    --success-color: #28a745;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #17a2b8;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --border-color: #dee2e6;
+    --text-color: #212529;
+    --text-muted: #6c757d;
+    --bg-color: #ffffff;
+    --hover-color: #f8f9fa;
 }
 
 body.dark {
@@ -33,6 +47,20 @@ body.dark {
     --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.4);
     --warning: #e53e3e;
     --success: #2f855a;
+    --primary-color: #0d6efd;
+    --primary-color-light: rgba(13, 110, 253, 0.2);
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+    --light-color: #212529;
+    --dark-color: #f8f9fa;
+    --border-color: #495057;
+    --text-color: #f8f9fa;
+    --text-muted: #adb5bd;
+    --bg-color: #212529;
+    --hover-color: #343a40;
 }
 
 body.obsidian {
@@ -49,6 +77,20 @@ body.obsidian {
     --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.6);
     --warning: #e53e3e;
     --success: #2f855a;
+    --primary-color: #8b5cf6;
+    --primary-color-light: rgba(139, 92, 246, 0.2);
+    --secondary-color: #64748b;
+    --success-color: #10b981;
+    --danger-color: #ef4444;
+    --warning-color: #f59e0b;
+    --info-color: #06b6d4;
+    --light-color: #1e293b;
+    --dark-color: #f1f5f9;
+    --border-color: #334155;
+    --text-color: #f1f5f9;
+    --text-muted: #94a3b8;
+    --bg-color: #0f172a;
+    --hover-color: #1e293b;
 }
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -1614,6 +1656,239 @@ hr {
 
 .suggestion-hide-btn:hover {
     background: #5a6268;
+}
+
+/* Zone selection styles */
+
+/* Modal de reformulation */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.modal.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+.modal.hidden {
+    display: none !important;
+}
+
+.modal-content {
+    background: var(--bg-color);
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+    border: 1px solid var(--border-color);
+}
+
+.modal.show .modal-content {
+    transform: scale(1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-color);
+}
+
+.modal-header h3 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 20px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.modal-close:hover {
+    background: var(--hover-color);
+    color: var(--text-color);
+}
+
+.modal-body {
+    padding: 24px;
+    background: var(--bg-color);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Options d'intention */
+.intention-options {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.intention-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
+    border: 2px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: var(--bg-color);
+    position: relative;
+}
+
+.intention-option:hover {
+    border-color: var(--primary-color);
+    background: var(--hover-color);
+    transform: translateY(-1px);
+}
+
+.intention-option.selected {
+    border-color: var(--primary-color);
+    background: var(--primary-color-light);
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+}
+
+.intention-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+}
+
+.intention-option.selected .intention-icon {
+    background: var(--primary-color);
+    transform: scale(1.05);
+}
+
+.intention-content {
+    flex: 1;
+}
+
+.intention-content h4 {
+    margin: 0 0 8px 0;
+    color: var(--text-color);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.intention-content p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.intention-content textarea {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    background: var(--bg-color);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+    min-height: 80px;
+    transition: all 0.2s ease;
+}
+
+.intention-content textarea:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px var(--primary-color-light);
+}
+
+/* Résultats de reformulation */
+.reformulation-suggestion {
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 16px;
+    transition: all 0.2s ease;
+}
+
+.reformulation-suggestion:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-content {
+    color: var(--text-color);
+    line-height: 1.6;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+}
+
+.suggestion-apply {
+    width: 100%;
+    justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .modal-content {
+        width: 95%;
+        margin: 20px;
+    }
+    
+    .intention-option {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .intention-icon {
+        align-self: center;
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+    }
+    
+    .modal-actions .btn {
+        width: 100%;
+    }
 }
 
 /* Zone selection styles */ 

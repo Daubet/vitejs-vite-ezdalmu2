@@ -186,6 +186,109 @@
         </div>
     </template>
 
+    <!-- Modal de sélection d'intention pour la reformulation -->
+    <div id="reformulation-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-magic"></i> Comment voulez-vous reformuler ce texte ?</h3>
+                <button class="modal-close" onclick="closeReformulationModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="intention-options">
+                    <div class="intention-option" data-intention="expand">
+                        <div class="intention-icon">
+                            <i class="fas fa-expand-arrows-alt"></i>
+                        </div>
+                        <div class="intention-content">
+                            <h4>Allonger / Enrichir</h4>
+                            <p>Développer le texte avec plus de détails et d'explications (x1.5 à x2)</p>
+                        </div>
+                    </div>
+                    
+                    <div class="intention-option" data-intention="summarize">
+                        <div class="intention-icon">
+                            <i class="fas fa-compress-arrows-alt"></i>
+                        </div>
+                        <div class="intention-content">
+                            <h4>Résumer / Raccourcir</h4>
+                            <p>Condenser en gardant l'essentiel (≈50% de la longueur)</p>
+                        </div>
+                    </div>
+                    
+                    <div class="intention-option" data-intention="rephrase">
+                        <div class="intention-icon">
+                            <i class="fas fa-sync-alt"></i>
+                        </div>
+                        <div class="intention-content">
+                            <h4>Même longueur, style différent</h4>
+                            <p>Reformuler avec un style ou un ton différent</p>
+                        </div>
+                    </div>
+                    
+                    <div class="intention-option" data-intention="custom">
+                        <div class="intention-icon">
+                            <i class="fas fa-edit"></i>
+                        </div>
+                        <div class="intention-content">
+                            <h4>Personnalisé</h4>
+                            <p>Décrivez exactement ce que vous voulez</p>
+                            <textarea id="custom-intention" placeholder="Ex: Rendre plus formel, ajouter des détails visuels, simplifier le vocabulaire..." rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-actions">
+                    <button id="generate-reformulation" class="btn btn-primary" disabled>
+                        <i class="fas fa-magic"></i> Générer
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeReformulationModal()">
+                        Annuler
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal des résultats de reformulation -->
+    <div id="reformulation-results-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-lightbulb"></i> Suggestions de reformulation</h3>
+                <button class="modal-close" onclick="closeReformulationResultsModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div id="reformulation-results">
+                    <!-- Les suggestions seront ajoutées ici -->
+                </div>
+                
+                <div class="modal-actions">
+                    <button id="regenerate-reformulation" class="btn btn-secondary">
+                        <i class="fas fa-sync-alt"></i> Régénérer
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeReformulationResultsModal()">
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template pour les suggestions de reformulation -->
+    <template id="reformulation-suggestion-template">
+        <div class="reformulation-suggestion">
+            <div class="suggestion-content"></div>
+            <button class="btn btn-primary suggestion-apply">
+                <i class="fas fa-check"></i> Appliquer
+            </button>
+        </div>
+    </template>
+
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

@@ -1337,6 +1337,148 @@ Donne 3 variantes courtes, sans parenthèses ni explication :
         logging.exception("OCR-Translate failed")
         return jsonify({"error": str(e)}), 500
 
+@app.route('/api/reformulate', methods=['POST'])
+def api_reformulate():
+    """Route pour reformulation intelligente avec intention spécifique"""
+    data = request.json
+    if data is None:
+        return jsonify({"error": "Invalid JSON"}), 400
+    
+    api_key = data.get('api_key', '')
+    content = data.get('content', '')
+    intention = data.get('intention', '')
+    custom_intention = data.get('custom_intention', '')
+    
+    if not api_key or not content:
+        return jsonify({"error": "Missing API key or content"}), 400
+    
+    # ─── PROMPTS SANS INVENTION ──────────────────────────────────────────────
+    if intention == "expand":
+        prompt = f"""
+Tu es un assistant de réécriture.
+
+◆ Objectif : étoffer la phrase ci-dessous **sans** ajouter d'information nouvelle.
+◆ Conserve temps, point de vue et registre d'origine.
+
+Règles :
+1. N'ajoute aucun nom propre, date, lieu ou évènement absent du texte.
+2. N'invente pas de contexte ni de justification implicite.
+3. Allonge la phrase d'environ +50 % (max +100 %).
+4. Retourne une seule phrase (pas de puces, pas de guillemets).
+5. Français soigné, même ton.
+
+Phrase : {content}
+
+Donne **3 variantes** développées, **une par ligne** :
+"""
+
+    elif intention == "summarize":
+        prompt = f"""
+Tu es un assistant de réécriture.
+
+◆ Objectif : condenser la phrase ci-dessous **sans rien omettre d'essentiel**.
+
+Règles :
+1. Ne supprime aucune information factuelle.
+2. N'ajoute aucun détail nouveau.
+3. Réduis la longueur d'environ 40 % à 60 %.
+4. Une seule phrase, même temps/verbe et même ton.
+5. Pas de puces, pas de guillemets.
+
+Phrase : {content}
+
+Donne **3 variantes** condensées, **une par ligne** :
+"""
+
+    elif intention == "rephrase":
+        prompt = f"""
+Tu es un assistant de réécriture.
+
+◆ Objectif : reformuler la phrase ci-dessous en gardant **exactement le même sens** et
+une longueur équivalente (±10 %).
+
+Règles :
+1. N'ajoute ni ne retire aucune information.
+2. Changements permis : vocabulaire, rythme, structure syntaxique.
+3. Longueur finale entre 90 % et 110 % de l'original.
+4. Une seule phrase, même registre.
+5. Pas de puces, pas de guillemets.
+
+Phrase : {content}
+
+Donne **3 variantes** reformulées, **une par ligne** :
+"""
+
+    elif intention == "custom" and custom_intention.strip():
+        prompt = f"""
+Tu es un assistant de réécriture.
+
+◆ La demande utilisateur est : « {custom_intention} »
+
+Avant d'écrire, **réinterprète mentalement** la demande pour qu'elle respecte :
+• aucune information ajoutée ou supprimée  
+• même temps/verbe et même point de vue que l'original
+
+Ensuite, applique-la à la phrase ci-dessous.
+
+Phrase : {content}
+
+Donne **3 variantes** conformes à la demande, **une par ligne** :
+"""
+
+    else:
+        # Fallback très strict
+        prompt = f"""
+Reformule la phrase ci-dessous sans changer son sens ni sa longueur.
+Ne pas ajouter d'élément nouveau.
+
+Phrase : {content}
+
+3 variantes, une par ligne :
+"""
+    # ─────────────────────────────────────────────────────────────────────────
+    
+    try:
+        response = requests.post(
+            f'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}',
+            json={
+                'contents': [{'parts': [{'text': prompt}]}],
+                'generationConfig': {
+                    'temperature': 0.2,          # moins créatif → moins d'inventions
+                    'candidateCount': 1,         # une seule sortie, plus stable
+                    'top_p': 0.9                 # limite le vocabulaire exotique
+                }
+            },
+            timeout=30
+        )
+        
+        if response.status_code != 200:
+            return jsonify({"error": response.json().get('error', {}).get('message', response.text)}), 502
+        
+        data = response.json()
+        raw_text = data.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', '')
+        
+        suggestions = []
+        for line in raw_text.split('\n'):
+            line = line.strip()
+            if line:
+                # Remove bullets, numbers, and explanations in parentheses
+                line = line.lstrip('•-0123456789. \t')
+                line = line.split('(', 1)[0].strip()
+                if line:
+                    suggestions.append(line)
+        
+        return jsonify({
+            "status": "success",
+            "suggestions": suggestions[:3],
+            "intention": intention,
+            "custom_intention": custom_intention
+        })
+        
+    except Exception as e:
+        logging.error(f"Reformulation API error: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/api/upload-reader', methods=['POST'])
 def api_upload_reader():
     """Route pour uploader des fichiers dans le lecteur (PDF et images)"""
