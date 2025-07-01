@@ -1,32 +1,32 @@
 {
   "blocks": [
     {
-      "type": "HC",
-      "number": 1,
+      "comment": "",
       "content": "Une catastrophe s'est abattue sur le monde",
-      "comment": ""
+      "number": 1,
+      "type": "HC"
     },
     {
-      "type": "HC",
-      "number": 2,
+      "comment": "",
       "content": "Un desastre d'une ampleur sans precedent dans l'hisoire de l'humanite",
-      "comment": ""
+      "number": 2,
+      "type": "HC"
     },
     {
-      "type": "HC",
+      "comment": "",
+      "content": "Face à des forces insurmontables, l'humanité chuta dans un chaos sans précédent.",
       "number": 3,
+      "type": "HC"
+    },
+    {
+      "comment": "",
       "content": "",
-      "comment": ""
+      "number": 4,
+      "type": "HC"
     },
     {
       "type": "B",
       "number": 1,
-      "content": "Face à des forces insurmontables, l'humanité chuta dans un chaos sans précédent.",
-      "comment": ""
-    },
-    {
-      "type": "HC",
-      "number": 4,
       "content": "",
       "comment": ""
     }
