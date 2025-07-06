@@ -2021,4 +2021,154 @@ hr {
 
 .modal-actions .btn {
     min-width: 100px;
+}
+
+/* Styles pour le modal de correction orthographique */
+.spellcheck-modal {
+    max-width: 600px;
+    width: 90%;
+}
+
+.spellcheck-progress {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    font-weight: 500;
+}
+
+.spellcheck-context {
+    margin-bottom: 20px;
+}
+
+.block-info {
+    margin-bottom: 8px;
+}
+
+.block-info-text {
+    font-size: 0.9rem;
+    color: var(--text-light);
+    font-weight: 500;
+    background: var(--primary-light);
+    padding: 4px 8px;
+    border-radius: var(--radius);
+    display: inline-block;
+}
+
+.context-text {
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-family: 'Inter', monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    position: relative;
+    margin-top: 8px;
+}
+
+.context-text .highlight {
+    background: var(--warning);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-weight: 600;
+}
+
+.spellcheck-error {
+    margin-bottom: 20px;
+}
+
+.error-message {
+    color: var(--warning);
+    font-weight: 500;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(var(--warning-rgb), 0.1);
+    border-radius: var(--radius);
+    border-left: 3px solid var(--warning);
+}
+
+.spellcheck-suggestions {
+    margin-bottom: 20px;
+}
+
+.suggestions-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.suggestion-item:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+
+.suggestion-item.selected {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.suggestion-text {
+    font-weight: 500;
+}
+
+.suggestion-apply-btn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.suggestion-item:hover .suggestion-apply-btn {
+    opacity: 1;
+}
+
+.suggestion-item.selected .suggestion-apply-btn {
+    opacity: 1;
+    background: white;
+    color: var(--primary);
+}
+
+/* Responsive pour le modal de correction */
+@media (max-width: 768px) {
+    .spellcheck-modal {
+        width: 95%;
+        margin: 10px;
+    }
+    
+    .spellcheck-modal .modal-body {
+        padding: 15px;
+    }
+    
+    .suggestions-list {
+        gap: 6px;
+    }
+    
+    .suggestion-item {
+        padding: 8px 10px;
+        font-size: 0.9rem;
+    }
+    
+    .modal-actions {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .modal-actions .btn {
+        width: 100%;
+        margin: 0;
+    }
 } 

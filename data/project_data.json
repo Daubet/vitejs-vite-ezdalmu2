@@ -8,13 +8,13 @@
     },
     {
       "comment": "",
-      "content": "Un desastre d'une ampleur sans precedent dans l'hisoire de l'humanite",
+      "content": "Un désastre d'une ampleur considérable",
       "number": 2,
       "type": "HC"
     },
     {
       "comment": "",
-      "content": "Face à des forces insurmontables, l'humanité chuta dans un chaos sans précédent.",
+      "content": "Face à des forces insurmontables, l'humanité chuta dans un chaos sans précédant.",
       "number": 3,
       "type": "HC"
     },
@@ -25,10 +25,10 @@
       "type": "HC"
     },
     {
-      "type": "B",
+      "comment": "",
+      "content": "arbrre",
       "number": 1,
-      "content": "",
-      "comment": ""
+      "type": "B"
     }
   ],
   "blockTypes": [

@@ -21,6 +21,11 @@ let currentReformulationContent = '';
 let currentReformulationIntention = '';
 let currentReformulationCustom = '';
 
+// Variables pour la correction orthographique interactive
+let spellErrors = [];
+let currentSpellIndex = 0;
+let spellHistory = [];
+
 // DOM references
 const blocksContainer = document.getElementById('blocks-container');
 const blockTypesButtons = document.getElementById('block-types-buttons');
@@ -82,6 +87,9 @@ function init() {
     renderCustomTypes(); // Initialiser la liste des types personnalisés
     
     setupEventListeners();
+    
+    // Setup reformulation modal handlers
+    setupReformulationModalHandlers();
     
     // Load data after UI is set up
     loadData();
@@ -208,6 +216,40 @@ function setupEventListeners() {
     
     // Translation AI button
     btnTranslateAi.addEventListener('click', captureAndTranslate);
+    
+    // Gestionnaires pour le modal de correction orthographique
+    document.getElementById('spellcheck-apply').addEventListener('click', applySpellcheckCorrection);
+    document.getElementById('spellcheck-ignore').addEventListener('click', ignoreSpellcheckError);
+    document.getElementById('spellcheck-back').addEventListener('click', goBackSpellcheck);
+    
+    // Raccourcis clavier pour le modal de correction
+    document.addEventListener('keydown', (e) => {
+        const spellModal = document.getElementById('spellcheck-modal');
+        if (spellModal.classList.contains('show')) {
+            switch(e.key) {
+                case 'Enter':
+                    e.preventDefault();
+                    if (!document.getElementById('spellcheck-apply').disabled) {
+                        applySpellcheckCorrection();
+                    }
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    ignoreSpellcheckError();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    if (!document.getElementById('spellcheck-back').disabled) {
+                        goBackSpellcheck();
+                    }
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    ignoreSpellcheckError();
+                    break;
+            }
+        }
+    });
 }
 
 // Configurer les gestionnaires pour les modals de reformulation
@@ -217,11 +259,14 @@ function setupReformulationModalHandlers() {
         if (e.key === 'Escape') {
             const reformulationModal = document.getElementById('reformulation-modal');
             const resultsModal = document.getElementById('reformulation-results-modal');
+            const spellModal = document.getElementById('spellcheck-modal');
             
             if (reformulationModal && !reformulationModal.classList.contains('hidden')) {
                 closeReformulationModal();
             } else if (resultsModal && !resultsModal.classList.contains('hidden')) {
                 closeReformulationResultsModal();
+            } else if (spellModal && spellModal.classList.contains('show')) {
+                closeSpellcheckModal();
             }
         }
     });
@@ -230,6 +275,7 @@ function setupReformulationModalHandlers() {
     document.addEventListener('click', (e) => {
         const reformulationModal = document.getElementById('reformulation-modal');
         const resultsModal = document.getElementById('reformulation-results-modal');
+        const spellModal = document.getElementById('spellcheck-modal');
         
         if (reformulationModal && !reformulationModal.classList.contains('hidden')) {
             if (e.target === reformulationModal) {
@@ -239,12 +285,23 @@ function setupReformulationModalHandlers() {
             if (e.target === resultsModal) {
                 closeReformulationResultsModal();
             }
+        } else if (spellModal && spellModal.classList.contains('show')) {
+            if (e.target === spellModal) {
+                closeSpellcheckModal();
+            }
         }
     });
 }
 
 // Handle keyboard shortcuts
 function handleKeyboardShortcuts(e) {
+    // Vérifier si le modal de correction orthographique est ouvert
+    const spellModal = document.getElementById('spellcheck-modal');
+    if (spellModal && spellModal.classList.contains('show')) {
+        // Ne pas traiter les raccourcis généraux si le modal de correction est ouvert
+        return;
+    }
+    
     // Ctrl/Cmd + Z for undo
     if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !document.getElementById('btn-undo').disabled) {
         e.preventDefault();
@@ -1599,7 +1656,7 @@ async function exportDocx() {
     }
 }
 
-// Spellcheck function
+// Spellcheck function - nouvelle version interactive
 async function spellCheck() {
     if (blocks.length === 0) {
         showToast('Aucun bloc à vérifier', 'error');
@@ -1617,13 +1674,19 @@ async function spellCheck() {
         if (response.ok) {
             const data = await response.json();
             
-            if (data.report) {
+            if (data.errors && data.errors.length > 0) {
+                // Initialiser les variables pour la correction interactive
+                spellErrors = data.errors;
+                currentSpellIndex = 0;
+                spellHistory = [];
+                
+                // Afficher le modal de correction
+                showSpellcheckModal();
+            } else {
+                // Aucune erreur trouvée
                 spellcheckResult.innerHTML = `<pre>${data.report}</pre>`;
                 toggleToolsSidebar(true);
-                showToast('Vérification terminée', 'success');
-            } else if (data.error) {
-                spellcheckResult.innerHTML = `<p class="error">${data.error}</p>`;
-                showToast('Erreur de vérification', 'error');
+                showToast('Aucune erreur trouvée', 'success');
             }
         } else {
             spellcheckResult.innerHTML = '<p class="error">Erreur de connexion</p>';
@@ -1636,6 +1699,246 @@ async function spellCheck() {
         spellcheckResult.innerHTML = '<p class="error">Erreur de connexion</p>';
         showToast('Erreur de connexion', 'error');
         showLoading(false);
+    }
+}
+
+// Afficher le modal de correction orthographique
+function showSpellcheckModal() {
+    const modal = document.getElementById('spellcheck-modal');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        modal.classList.add('show');
+    }, 10);
+    
+    // Afficher la première erreur
+    showNextError();
+}
+
+// Fermer le modal de correction orthographique
+function closeSpellcheckModal() {
+    const modal = document.getElementById('spellcheck-modal');
+    modal.classList.remove('show');
+    setTimeout(() => {
+        modal.classList.add('hidden');
+    }, 300);
+    
+    // Réinitialiser les variables
+    spellErrors = [];
+    currentSpellIndex = 0;
+    spellHistory = [];
+}
+
+// Afficher l'erreur suivante
+function showNextError() {
+    if (currentSpellIndex >= spellErrors.length) {
+        // Toutes les erreurs ont été traitées
+        closeSpellcheckModal();
+        showToast('Correction terminée !', 'success');
+        return;
+    }
+    
+    const error = spellErrors[currentSpellIndex];
+    const block = blocks[error.block_index];
+    
+    // Debug: afficher les informations de l'erreur
+    console.log('Erreur actuelle:', {
+        blockIndex: error.block_index,
+        errorStart: error.error_start,
+        errorEnd: error.error_end,
+        blockContent: block.content,
+        errorText: block.content.substring(error.error_start, error.error_end)
+    });
+    
+    // Mettre à jour le compteur
+    document.getElementById('spellcheck-counter').textContent = 
+        `${currentSpellIndex + 1} / ${spellErrors.length}`;
+    
+    // Afficher l'information du bloc
+    document.getElementById('spellcheck-block-info').textContent = 
+        `Bloc: ${block.type}${block.number}`;
+    
+    // Afficher le contexte avec l'erreur en surbrillance
+    const contextText = document.getElementById('spellcheck-context-text');
+    const blockContent = block.content;
+    
+    // Vérifier que les positions sont valides
+    if (error.error_start >= 0 && error.error_end <= blockContent.length && error.error_start < error.error_end) {
+        const beforeError = blockContent.substring(0, error.error_start);
+        const errorText = blockContent.substring(error.error_start, error.error_end);
+        const afterError = blockContent.substring(error.error_end);
+        
+        contextText.innerHTML = `${beforeError}<span class="highlight">${errorText}</span>${afterError}`;
+    } else {
+        // Position invalide, afficher le contenu complet
+        contextText.innerHTML = `<span class="highlight">Erreur de position</span>${blockContent}`;
+        console.error('Position d\'erreur invalide:', error);
+    }
+    
+    // Afficher le message d'erreur
+    document.getElementById('spellcheck-error-message').textContent = error.message;
+    
+    // Afficher les suggestions
+    const suggestionsList = document.getElementById('spellcheck-suggestions-list');
+    suggestionsList.innerHTML = '';
+    
+    if (error.replacements && error.replacements.length > 0) {
+        error.replacements.slice(0, 5).forEach((replacement, index) => {
+            const suggestionItem = document.createElement('div');
+            suggestionItem.className = 'suggestion-item';
+            suggestionItem.innerHTML = `
+                <span class="suggestion-text">${replacement.value}</span>
+                <button class="suggestion-apply-btn btn btn-primary btn-sm">
+                    <i class="fas fa-check"></i> Appliquer
+                </button>
+            `;
+            
+            // Gestionnaire pour sélectionner une suggestion
+            suggestionItem.addEventListener('click', () => {
+                // Désélectionner toutes les suggestions
+                suggestionsList.querySelectorAll('.suggestion-item').forEach(item => {
+                    item.classList.remove('selected');
+                });
+                
+                // Sélectionner cette suggestion
+                suggestionItem.classList.add('selected');
+                
+                // Activer le bouton Appliquer
+                document.getElementById('spellcheck-apply').disabled = false;
+            });
+            
+            suggestionsList.appendChild(suggestionItem);
+        });
+    } else {
+        // Aucune suggestion disponible
+        const noSuggestions = document.createElement('div');
+        noSuggestions.className = 'suggestion-item';
+        noSuggestions.innerHTML = '<span class="suggestion-text">Aucune suggestion disponible</span>';
+        suggestionsList.appendChild(noSuggestions);
+        
+        // Désactiver le bouton Appliquer
+        document.getElementById('spellcheck-apply').disabled = true;
+    }
+    
+    // Mettre à jour l'état des boutons
+    document.getElementById('spellcheck-apply').disabled = true;
+    document.getElementById('spellcheck-back').disabled = currentSpellIndex === 0;
+}
+
+// Appliquer la correction sélectionnée
+async function applySpellcheckCorrection() {
+    const error = spellErrors[currentSpellIndex];
+    const selectedSuggestion = document.querySelector('.suggestion-item.selected');
+    
+    if (!selectedSuggestion) {
+        showToast('Sélectionnez une suggestion', 'warning');
+        return;
+    }
+    
+    const suggestionText = selectedSuggestion.querySelector('.suggestion-text').textContent;
+    
+    try {
+        // Appeler l'API pour appliquer la correction
+        const response = await fetch('/api/apply-correction', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                block_index: error.block_index,
+                error_start: error.error_start,
+                error_end: error.error_end,
+                replacement: suggestionText
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            
+            // Sauvegarder l'état avant modification pour l'historique
+            spellHistory.push({
+                blockIndex: error.block_index,
+                oldContent: data.original,
+                errorIndex: currentSpellIndex
+            });
+            
+            // Mettre à jour le bloc en mémoire
+            blocks[error.block_index].content = data.corrected;
+            
+            // Mettre à jour l'affichage
+            renderBlocks();
+            
+            // Passer à l'erreur suivante
+            currentSpellIndex++;
+            showNextError();
+            
+            showToast('Correction appliquée', 'success');
+        } else {
+            const errorData = await response.json();
+            showToast(`Erreur: ${errorData.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error applying correction:', error);
+        showToast('Erreur lors de l\'application de la correction', 'error');
+    }
+}
+
+// Ignorer l'erreur actuelle
+function ignoreSpellcheckError() {
+    currentSpellIndex++;
+    showNextError();
+}
+
+// Revenir à l'erreur précédente
+function goBackSpellcheck() {
+    if (currentSpellIndex > 0) {
+        currentSpellIndex--;
+        showNextError();
+    }
+}
+
+// Annuler la dernière correction
+async function undoLastSpellcheck() {
+    if (spellHistory.length > 0) {
+        const lastAction = spellHistory.pop();
+        const block = blocks[lastAction.blockIndex];
+        
+        try {
+            // Restaurer le contenu via l'API
+            const response = await fetch('/api/apply-correction', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    block_index: lastAction.blockIndex,
+                    error_start: 0,
+                    error_end: block.content.length,
+                    replacement: lastAction.oldContent
+                })
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Restaurer le contenu
+                block.content = data.corrected;
+                
+                // Mettre à jour l'affichage
+                renderBlocks();
+                
+                // Revenir à l'erreur correspondante
+                currentSpellIndex = lastAction.errorIndex;
+                showNextError();
+                
+                showToast('Dernière correction annulée', 'info');
+            } else {
+                const errorData = await response.json();
+                showToast(`Erreur lors de l'annulation: ${errorData.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error undoing correction:', error);
+            showToast('Erreur lors de l\'annulation', 'error');
+        }
     }
 }
 

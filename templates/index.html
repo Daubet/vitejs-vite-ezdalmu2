@@ -289,6 +289,55 @@
         </div>
     </template>
 
+    <!-- Modal de correction orthographique interactive -->
+    <div id="spellcheck-modal" class="modal hidden">
+        <div class="modal-content spellcheck-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-spell-check"></i> Correction orthographique</h3>
+                <div class="spellcheck-progress">
+                    <span id="spellcheck-counter">0 / 0</span>
+                </div>
+                <button class="modal-close" onclick="closeSpellcheckModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="spellcheck-context">
+                    <h4>Contexte :</h4>
+                    <div class="block-info">
+                        <span id="spellcheck-block-info" class="block-info-text">Bloc: </span>
+                    </div>
+                    <div id="spellcheck-context-text" class="context-text"></div>
+                </div>
+                
+                <div class="spellcheck-error">
+                    <h4>Erreur :</h4>
+                    <div id="spellcheck-error-message" class="error-message"></div>
+                </div>
+                
+                <div class="spellcheck-suggestions">
+                    <h4>Suggestions :</h4>
+                    <div id="spellcheck-suggestions-list" class="suggestions-list">
+                        <!-- Les suggestions seront ajoutées ici -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button id="spellcheck-ignore" class="btn btn-secondary">
+                    <i class="fas fa-times"></i> Ignorer
+                </button>
+                <button id="spellcheck-apply" class="btn btn-primary" disabled>
+                    <i class="fas fa-check"></i> Appliquer
+                </button>
+                <button id="spellcheck-back" class="btn btn-secondary" disabled>
+                    <i class="fas fa-arrow-left"></i> Précédent
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
 </html> 

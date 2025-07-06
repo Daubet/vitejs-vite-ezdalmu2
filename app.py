@@ -738,30 +738,64 @@ def api_spellcheck():
     if not blocks:
         return jsonify({"error": "No blocks to check"})
     
-    # Prepare text for LanguageTool API
-    text = "\n".join([f"{b['type']}{b['number']} {b['content']}" for b in blocks])
+    all_errors = []
     
     try:
-        response = requests.post(
-            'https://api.languagetool.org/v2/check',
-            data={
-                'text': text,
-                'language': 'fr'
-            }
-        )
+        # Appeler LanguageTool pour chaque bloc individuellement
+        for idx, block in enumerate(blocks):
+            if not block.get('content', '').strip():
+                continue  # Ignorer les blocs vides
+                
+            # Appel à LanguageTool pour ce bloc uniquement
+            response = requests.post(
+                'https://api.languagetool.org/v2/check',
+                data={
+                    'text': block['content'],
+                    'language': 'fr'
+                },
+                timeout=10  # Timeout pour éviter les blocages
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Traiter les matches pour ce bloc
+                for match in data.get('matches', [])[:20]:  # Limiter à 20 erreurs par bloc
+                    error_obj = {
+                        'block_index': idx,
+                        'error_start': match['offset'],
+                        'error_end': match['offset'] + match.get('length', 0),
+                        'message': match.get('message', ''),
+                        'rule_id': match.get('rule', {}).get('id', ''),
+                        'replacements': match.get('replacements', []),
+                        'context': match.get('context', {}).get('text', ''),
+                        'offset': match['offset'],
+                        'length': match.get('length', 0)
+                    }
+                    all_errors.append(error_obj)
+            else:
+                logging.warning(f"LanguageTool error for block {idx}: {response.status_code}")
+                
+        # Also return the old format for backward compatibility
+        total_errors = len(all_errors)
+        if total_errors == 0:
+            return jsonify({
+                "report": "✅ Aucun problème",
+                "errors": [],
+                "total_errors": 0
+            })
         
-        if response.status_code == 200:
-            data = response.json()
-            if not data.get('matches', []):
-                return jsonify({"report": "✅ Aucun problème"})
-            
-            matches = data.get('matches', [])[:20]
-            report = f"Problèmes : {len(data.get('matches', []))}\n\n"
-            report += "\n".join([f"→ {m.get('message', '')}" for m in matches])
-            
-            return jsonify({"report": report})
-        else:
-            return jsonify({"error": "API Error", "details": response.text})
+        # Créer le rapport texte pour la compatibilité
+        report = f"Problèmes : {total_errors}\n\n"
+        for i, error in enumerate(all_errors[:20]):  # Limiter à 20 dans le rapport
+            report += f"→ {error['message']}\n"
+        
+        return jsonify({
+            "report": report,
+            "errors": all_errors,
+            "total_errors": total_errors
+        })
+        
     except Exception as e:
         logging.error(f"Spellcheck error: {str(e)}")
         return jsonify({"error": "Network Error", "details": str(e)})
@@ -1521,6 +1555,52 @@ def api_upload_reader():
         })
     
     return jsonify({"error": "Failed to upload file"}), 500
+
+@app.route('/api/apply-correction', methods=['POST'])
+def api_apply_correction():
+    data = request.json or {}
+    idx   = data.get('block_index')
+    start = data.get('error_start')
+    end   = data.get('error_end')
+    repl  = data.get('replacement')
+
+    if None in (idx, start, end, repl):
+        return jsonify({"error": "Missing required parameters"}), 400
+
+    # Validation des types après vérification de None
+    if not isinstance(idx, int) or not isinstance(start, int) or not isinstance(end, int) or not isinstance(repl, str):
+        return jsonify({"error": "Invalid parameter types"}), 400
+
+    project = load_data()
+    blocks  = project.get('blocks', [])
+    if idx >= len(blocks):
+        return jsonify({"error": "Invalid block index"}), 400
+
+    orig = blocks[idx]['content']
+    if not (0 <= start < end <= len(orig)):
+        return jsonify({"error": "Invalid error positions"}), 400
+
+    # On découpe en trois
+    before = orig[:start]
+    after  = orig[end:]
+    repl   = repl.strip()
+
+    # On ne met un espace que s'il manque vraiment :
+    sep1 = '' if before.endswith((' ', '\n', '')) or repl.startswith(' ') else ' '
+    sep2 = '' if after.startswith((' ', '\n', '')) or repl.endswith(' ') else ' '
+
+    corrected = f"{before}{sep1}{repl}{sep2}{after}"
+
+    # Mise à jour & sauvegarde
+    blocks[idx]['content'] = corrected
+    save_data(project)
+
+    return jsonify({
+        "status":    "success",
+        "original":  orig,
+        "corrected": corrected,
+        "block_index": idx
+    })
 
 if __name__ == '__main__':
     app.run(debug=True) 
