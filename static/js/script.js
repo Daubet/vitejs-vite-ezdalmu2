@@ -2,6 +2,7 @@
 let blocks = [];
 let blockTypes = ['HB', 'B', 'DB', 'C', 'HC'];
 let customTypes = [];
+let glossary = []; // <-- NOUVEAU: variable pour le glossaire
 let history = [];
 let aiMap = {};
 let theme = localStorage.getItem('wtoon-theme') || 'light';
@@ -72,6 +73,13 @@ const btnTranslateAi = document.getElementById('btn-translate-ai');
 const translationSuggestions = document.getElementById('translation-suggestions');
 const suggestionsContainer = document.getElementById('suggestions-container');
 
+// AJOUTÉ : Références pour le glossaire
+const glossarySidebar = document.getElementById('glossary-sidebar');
+const btnToggleGlossary = document.getElementById('btn-toggle-glossary');
+const btnAddGlossaryTerm = document.getElementById('btn-add-glossary-term');
+const editableGlossaryTableBody = document.querySelector('#editable-glossary-table tbody');
+
+
 // Initialize app
 function init() {
     setTheme(theme);
@@ -81,6 +89,9 @@ function init() {
     
     // Ensure tools sidebar is hidden by default
     toolsSidebar.setAttribute('data-visible', 'false');
+
+    // AJOUTÉ : Assurer que le panneau du glossaire est masqué au démarrage
+    glossarySidebar.setAttribute('data-visible', 'false');
     
     // Initialize viewer panel
     initializeViewerPanel();
@@ -162,6 +173,14 @@ function setupEventListeners() {
         toolsSidebar.setAttribute('data-visible', newState);
         showToast(isVisible ? 'Menu outils fermé' : 'Menu outils ouvert');
     });
+
+    // AJOUTÉ : Listener pour le bouton du glossaire
+    btnToggleGlossary.addEventListener('click', () => {
+        const isVisible = glossarySidebar.getAttribute('data-visible') === 'true';
+        glossarySidebar.setAttribute('data-visible', isVisible ? 'false' : 'true');
+        showToast(isVisible ? 'Glossaire fermé' : 'Glossaire ouvert');
+    });
+    btnAddGlossaryTerm.addEventListener('click', addGlossaryTerm);
     
     document.getElementById('btn-undo').addEventListener('click', undo);
     document.getElementById('btn-docx').addEventListener('click', exportDocx);
@@ -302,10 +321,14 @@ function setupReformulationModalHandlers() {
 
 // Handle keyboard shortcuts
 function handleKeyboardShortcuts(e) {
+    const activeEl = document.activeElement;
+    if (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA') {
+        return; // Ne pas activer les raccourcis si on tape du texte
+    }
+
     // Vérifier si le modal de correction orthographique est ouvert
     const spellModal = document.getElementById('spellcheck-modal');
     if (spellModal && spellModal.classList.contains('show')) {
-        // Ne pas traiter les raccourcis généraux si le modal de correction est ouvert
         return;
     }
     
@@ -321,6 +344,12 @@ function handleKeyboardShortcuts(e) {
         e.preventDefault();
         saveData({ showSpinner: true });
         showToast('Projet sauvegardé');
+    }
+
+    // AJOUTÉ : Raccourci pour le glossaire
+    if ((e.ctrlKey || e.metaKey) && e.key === 'g') {
+        e.preventDefault();
+        btnToggleGlossary.click();
     }
 }
 
@@ -839,7 +868,8 @@ async function loadData() {
             const data = await response.json();
             blocks = data.blocks || [];
             blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
-            
+            glossary = data.glossary || []; // <-- MODIFIÉ: Chargement du glossaire
+
             // Séparer les types par défaut des types personnalisés
             const defaultTypes = ['HB', 'B', 'DB', 'C', 'HC'];
             customTypes = blockTypes.filter(type => !defaultTypes.includes(type));
@@ -849,6 +879,7 @@ async function loadData() {
             renderBlocks();
             renderBlockTypeButtons();
             renderCustomTypes(); // Afficher les types personnalisés
+            renderGlossary();    // <-- MODIFIÉ: Affichage du glossaire
             updateBlockCount();
         } catch (error) {
             console.error('Failed to load data:', error);
@@ -883,7 +914,7 @@ async function saveData(opts = {showSpinner: false}) {
         await fetch('/api/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blocks, blockTypes })
+            body: JSON.stringify({ blocks, blockTypes, glossary }) // <-- MODIFIÉ: Envoi du glossaire
         });
     } catch (error) {
         console.error('Failed to save data:', error);
@@ -1185,7 +1216,6 @@ async function importProject(e) {
         try {
             console.log(`Fichier à importer: ${file.name}, type: ${file.type}, taille: ${file.size} octets`);
             
-            // Check if it's a ZIP file (new format) or JSON file (old format)
             const isZip = file.type === 'application/zip' || 
                          file.type === 'application/x-zip-compressed' || 
                          file.name.toLowerCase().endsWith('.zip') ||
@@ -1194,11 +1224,9 @@ async function importProject(e) {
             console.log(`Format détecté: ${isZip ? 'ZIP/WTOON' : 'JSON'}`);
             
             if (isZip) {
-                // Handle ZIP format (new format)
                 await importZipProject(file);
                 showToast('Projet importé avec succès (format ZIP)', 'success');
             } else {
-                // Handle JSON format (old format)
                 await importJsonProject(file);
                 showToast('Projet importé avec succès (format JSON)', 'success');
             }
@@ -1225,7 +1253,6 @@ function logImageInfo(imagesArray) {
     
     console.log(`Images (${imagesArray.length} au total):`, imagesArray);
     
-    // Vérifier le format attendu pour chaque image
     let validFormat = true;
     for (let i = 0; i < Math.min(5, imagesArray.length); i++) {
         const img = imagesArray[i];
@@ -1240,12 +1267,10 @@ function logImageInfo(imagesArray) {
         }
     }
     
-    // Vérifier les URLs des images
     const firstImg = imagesArray[0];
     console.log("URL première image:", firstImg.url);
     console.log("Vérification de l'accès à l'image:", firstImg.url);
     
-    // Tenter de charger la première image pour vérification
     const img = new Image();
     img.onload = () => console.log("✅ Image chargée avec succès");
     img.onerror = () => console.error("❌ Erreur de chargement de l'image");
@@ -1261,38 +1286,31 @@ async function importZipProject(file) {
         
         console.log('Préparation du fichier pour import:', file.name, file.type, file.size + ' octets');
 
-        // Vérifier la taille du fichier
-        const fileSizeMB = file.size / (1024 * 1024); // Taille en MB
+        const fileSizeMB = file.size / (1024 * 1024);
         if (fileSizeMB > 90) {
             throw new Error(`Fichier trop volumineux (${fileSizeMB.toFixed(1)} MB). La limite est de 90 MB.`);
         }
         
-        // Vérifier le type de fichier
         if (!file.name.toLowerCase().endsWith('.zip') && !file.name.toLowerCase().endsWith('.wtoon')) {
             throw new Error('Le fichier doit avoir une extension .zip ou .wtoon');
         }
         
-        // Create form data with the ZIP file
-                const formData = new FormData();
+        const formData = new FormData();
         formData.append('file', file);
                 
-        // Send the ZIP file to the new backend endpoint
         const response = await fetch('/api/import-zip', {
-                    method: 'POST',
-                    body: formData
-                });
+            method: 'POST',
+            body: formData
+        });
                 
-        // Vérifier d'abord si c'est une erreur 413 (entité trop grande)
         if (response.status === 413) {
             throw new Error(`Le fichier est trop volumineux pour le serveur. La limite est de 90 MB. 
 Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`);
         }
         
-        // Récupérer le contenu de la réponse pour analyse
         const rawResponse = await response.text();
         console.log('Réponse brute (début):', rawResponse.substring(0, 200) + '...'); 
         
-        // Parse JSON response
         let data;
         try {
             data = JSON.parse(rawResponse);
@@ -1300,10 +1318,8 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
             console.error('Erreur de parsing JSON:', parseError);
             console.error('Réponse non JSON (début):', rawResponse.substring(0, 200));
             
-            // Afficher un message d'erreur plus détaillé
             let detailedError = 'La réponse du serveur n\'est pas au format JSON valide.';
             
-            // Détecter si c'est du HTML (erreur 500 interne, etc.)
             if (rawResponse.trim().startsWith('<!DOCTYPE') || rawResponse.trim().startsWith('<html')) {
                 detailedError = 'Le serveur a renvoyé une page HTML au lieu de JSON. Cela peut indiquer une erreur interne du serveur.';
             }
@@ -1311,7 +1327,6 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
             throw new Error(`Erreur d'importation: ${detailedError}`);
         }
         
-        // Vérifier si la réponse contient une erreur
         if (data.error) {
             const errorDetails = data.details ? `\nDétails: ${data.details}` : '';
             throw new Error(`${data.error}${errorDetails}`);
@@ -1323,85 +1338,59 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
         
         console.log('Import success:', data);
         
-        // Update blocks and blockTypes from the returned project data
+        // MODIFIÉ : Mise à jour des données incluant le glossaire
         blocks = data.project.blocks || [];
         blockTypes = data.project.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
-        
-                    // If API returned image folder info, update UI to show it
-            if (data.imagesFolder) {
-                try {
-                    console.log('Images folder:', data.imagesFolder);
+        glossary = data.project.glossary || []; // <-- NOUVEAU
+
+        if (data.imagesFolder) {
+            try {
+                console.log('Images folder:', data.imagesFolder);
+                const folderName = data.imagesFolder;
+                const folderPath = `/static/uploads/${folderName}`;
+                
+                if (data.images && Array.isArray(data.images) && data.images.length > 0) {
+                    console.log(`Affichage de ${data.images.length} images fournies par le serveur`);
+                    logImageInfo(data.images);
+                    displayExtractedImages(data.images);
                     
-                    // Récupérer les images du dossier pour les afficher
-                    // Construire des objets images à partir des informations du dossier
-                    const folderName = data.imagesFolder;
-                    const folderPath = `/static/uploads/${folderName}`;
-                    
-                    // Vérifier s'il y a des métadonnées d'images
-                    const images = [];
-                    
-                    // Si le serveur a renvoyé une liste d'images (nouvelle version)
-                    if (data.images && Array.isArray(data.images) && data.images.length > 0) {
-                        console.log(`Affichage de ${data.images.length} images fournies par le serveur`);
-                        
-                        // Vérifier et diagnostiquer les problèmes d'images
-                        logImageInfo(data.images);
-                        
-                        // Afficher les images dans l'interface
-                        displayExtractedImages(data.images);
-                        
-                        // Nettoyer le container si les images ne sont pas visibles
-                        setTimeout(() => {
-                            if (extractedImagesContainer.children.length === 0) {
-                                console.error("Les images n'ont pas été affichées correctement. Tentative de récupération...");
-                                // Nouvelle tentative d'affichage
-                                extractedImagesContainer.innerHTML = '';
-                                displayExtractedImages(data.images);
-                            }
-                        }, 500);
-                        
-                    } else {
-                        // Version de secours: nous devons créer les objets images par simulation
-                        console.warn("Pas d'informations détaillées sur les images. Utilisation de la méthode alternative.");
-                        
-                        // Informer l'utilisateur que les images ont été importées mais sans détails
-                        showToast(`Images importées dans le dossier ${folderName}. Utilisez le panneau Projet pour les voir.`, 'info', 7000);
-                    }
-                    
-                    // Mettre à jour les informations sur le statut de l'extraction
-                    const nombreImages = data.images ? data.images.length : 0;
-                    extractionStatus.textContent = `${nombreImages} images importées avec succès`;
-        extractionStatus.className = 'status-message success';
-        
-                    // Ouvrir le panel du projet et afficher la section extraction
-        projectSidebar.setAttribute('data-visible', 'true');
-        
-                    // Afficher une notification
-                    showToast(`Import réussi : ${blocks.length} blocs et ${nombreImages} images.`, 'success');
-                } catch (error) {
-                    console.error('Error handling images info:', error);
-                    // Continue with import even if displaying images fails
+                    setTimeout(() => {
+                        if (extractedImagesContainer.children.length === 0) {
+                            console.error("Les images n'ont pas été affichées correctement. Tentative de récupération...");
+                            extractedImagesContainer.innerHTML = '';
+                            displayExtractedImages(data.images);
+                        }
+                    }, 500);
+                } else {
+                    console.warn("Pas d'informations détaillées sur les images. Utilisation de la méthode alternative.");
+                    showToast(`Images importées dans le dossier ${folderName}. Utilisez le panneau Projet pour les voir.`, 'info', 7000);
                 }
+                
+                const nombreImages = data.images ? data.images.length : 0;
+                extractionStatus.textContent = `${nombreImages} images importées avec succès`;
+                extractionStatus.className = 'status-message success';
+                projectSidebar.setAttribute('data-visible', 'true');
+                showToast(`Import réussi : ${blocks.length} blocs et ${nombreImages} images.`, 'success');
+            } catch (error) {
+                console.error('Error handling images info:', error);
             }
+        }
         
-        // Reset history and update UI
-    history = [];
-    aiMap = {};
+        history = [];
+        aiMap = {};
         
-        // Don't call loadData() as we already have the project data from the response
-    saveData(); // Save the new data to server
-    renderBlocks();
-    renderBlockTypeButtons();
-    updateBlockCount();
-    document.getElementById('btn-undo').disabled = true;
+        saveData();
+        renderBlocks();
+        renderBlockTypeButtons();
+        renderGlossary(); // <-- NOUVEAU
+        updateBlockCount();
+        document.getElementById('btn-undo').disabled = true;
         
     } catch (error) {
         console.error('Error importing ZIP:', error);
         
-        // Afficher un message d'erreur amélioré
         const errorMessage = error.message || 'Erreur inconnue';
         
-        // Proposer des solutions en fonction du message d'erreur
         let suggestions = '';
         if (errorMessage.includes('HTML') || errorMessage.includes('<!DOCTYPE')) {
             suggestions = '\nEssayez de recharger la page et réessayer.';
@@ -1413,16 +1402,15 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
             suggestions = '\nVérifiez que votre fichier n\'est pas corrompu.';
         }
         
-        showToast('Erreur d\'importation: ' + errorMessage + suggestions, 'error', 10000); // Afficher plus longtemps
-        throw error; // Re-throw for the parent import function to handle
+        showToast('Erreur d\'importation: ' + errorMessage + suggestions, 'error', 10000);
+        throw error;
     }
 }
 
 // Import project from JSON format (legacy)
 async function importJsonProject(file) {
     return new Promise((resolve, reject) => {
-        // Vérifier la taille du fichier
-        const fileSizeMB = file.size / (1024 * 1024); // Taille en MB
+        const fileSizeMB = file.size / (1024 * 1024);
         if (fileSizeMB > 90) {
             reject(new Error(`Fichier trop volumineux (${fileSizeMB.toFixed(1)} MB). La limite est de 90 MB.`));
             return;
@@ -1435,39 +1423,30 @@ async function importJsonProject(file) {
                 const data = JSON.parse(event.target.result);
                 blocks = data.blocks || [];
                 blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
-                
-                // Process embedded images if they exist
+                glossary = data.glossary || []; // <-- NOUVEAU
+
                 if (data.embeddedImages && Object.keys(data.embeddedImages).length > 0) {
-                    // Create a unique folder for this import
                     const importId = Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
                     const importFolder = `webtoon_${importId}`;
                     
-                    // Create the folder on the server
                     await fetch('/api/create-folder', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ folderName: importFolder })
                     });
                     
-                    // Prepare array to collect imported images for display
                     const importedImages = [];
                     
-                    // Upload each embedded image
                     for (const [path, base64] of Object.entries(data.embeddedImages)) {
                         try {
-                            // Extract filename from path
                             const filename = path.split('/').pop();
-                            
-                            // Convert base64 to blob
                             const fetchResponse = await fetch(base64);
                             const blob = await fetchResponse.blob();
                             
-                            // Create form data
                             const formData = new FormData();
                             formData.append('file', blob, filename);
                             formData.append('targetFolder', importFolder);
                             
-                            // Upload to server
                             const uploadResponse = await fetch('/api/upload-to-folder', {
                                 method: 'POST',
                                 body: formData
@@ -1475,14 +1454,12 @@ async function importJsonProject(file) {
                             
                             const uploadData = await uploadResponse.json();
                             
-                            // Add to imported images array
                             importedImages.push({
                                 filename: filename,
                                 url: uploadData.url,
                                 path: uploadData.path
                             });
                             
-                            // Update references in blocks
                             blocks.forEach(block => {
                                 if (block.content) {
                                     block.content = block.content.replaceAll(
@@ -1496,19 +1473,11 @@ async function importJsonProject(file) {
                         }
                     }
                     
-                    // Display imported images in the extracted images container
                     if (importedImages.length > 0) {
-                        // Update extraction status
                         extractionStatus.textContent = `${importedImages.length} images importées avec succès`;
                         extractionStatus.className = 'status-message success';
-                        
-                        // Display the images
                         displayExtractedImages(importedImages);
-                        
-                        // Open project sidebar to show the images
                         projectSidebar.setAttribute('data-visible', 'true');
-                        
-                        // Show toast
                         showToast(`${importedImages.length} images restaurées depuis le fichier importé`, 'success');
                     }
                 }
@@ -1518,6 +1487,7 @@ async function importJsonProject(file) {
                 saveData();
                 renderBlocks();
                 renderBlockTypeButtons();
+                renderGlossary(); // <-- NOUVEAU
                 updateBlockCount();
                 document.getElementById('btn-undo').disabled = true;
                 
@@ -1539,11 +1509,13 @@ async function importJsonProject(file) {
 function resetAll() {
     if (confirm('Tout effacer ?')) {
         blocks = [];
+        glossary = []; // <-- MODIFIÉ
         history = [];
         aiMap = {};
         spellcheckResult.innerHTML = '<p>Aucun rapport.</p>';
         saveData({ showSpinner: true });
         renderBlocks();
+        renderGlossary(); // <-- MODIFIÉ
         updateBlockCount();
         document.getElementById('btn-undo').disabled = true;
         showToast('Projet réinitialisé', 'info');
@@ -1555,23 +1527,18 @@ function addType() {
     const newType = prompt('Nouveau type de bloc:');
     if (newType && /^[A-Z]+$/.test(newType)) {
         if (!blockTypes.includes(newType)) {
-            // Ajouter aux deux tableaux
             blockTypes.push(newType);
             customTypes.push(newType);
             
-            // Mettre à jour l'UI avec animation
             renderBlockTypeButtons();
             
-            // Animation pour le nouveau type
             const container = document.getElementById('custom-types-container');
             if (container) {
-                // Supprimer le message "Aucun type personnalisé" si présent
                 const infoText = container.querySelector('.info-text');
                 if (infoText) {
                     infoText.remove();
                 }
                 
-                // Créer le nouvel élément
                 const typeItem = document.createElement('div');
                 typeItem.className = 'custom-type-item';
                 typeItem.style.opacity = '0';
@@ -1594,17 +1561,14 @@ function addType() {
                 typeItem.appendChild(deleteBtn);
                 container.appendChild(typeItem);
                 
-                // Animation d'entrée
                 setTimeout(() => {
                     typeItem.style.opacity = '1';
                     typeItem.style.transform = 'scale(1)';
                 }, 10);
             } else {
-                // Fallback si le conteneur n'est pas trouvé
                 renderCustomTypes();
             }
             
-            // Sauvegarder
             saveData();
             showToast(`Type ${newType} ajouté`, 'success');
         } else {
@@ -1673,15 +1637,12 @@ async function spellCheck() {
                 const data = await response.json();
                 
                 if (data.errors && data.errors.length > 0) {
-                    // Initialiser les variables pour la correction interactive
                     spellErrors = data.errors;
                     currentSpellIndex = 0;
                     spellHistory = [];
                     
-                    // Afficher le modal de correction
                     showSpellcheckModal();
                 } else {
-                    // Aucune erreur trouvée
                     spellcheckResult.innerHTML = `<pre>${data.report}</pre>`;
                     toggleToolsSidebar(true);
                     showToast('Aucune erreur trouvée', 'success');
@@ -1707,7 +1668,6 @@ function showSpellcheckModal() {
         modal.classList.add('show');
     }, 10);
     
-    // Afficher la première erreur
     showNextError();
 }
 
@@ -1719,7 +1679,6 @@ function closeSpellcheckModal() {
         modal.classList.add('hidden');
     }, 300);
     
-    // Réinitialiser les variables
     spellErrors = [];
     currentSpellIndex = 0;
     spellHistory = [];
@@ -1728,7 +1687,6 @@ function closeSpellcheckModal() {
 // Afficher l'erreur suivante
 function showNextError() {
     if (currentSpellIndex >= spellErrors.length) {
-        // Toutes les erreurs ont été traitées
         closeSpellcheckModal();
         showToast('Correction terminée !', 'success');
         return;
@@ -1737,7 +1695,6 @@ function showNextError() {
     const error = spellErrors[currentSpellIndex];
     const block = blocks[error.block_index];
     
-    // Debug: afficher les informations de l'erreur
     console.log('Erreur actuelle:', {
         blockIndex: error.block_index,
         errorStart: error.error_start,
@@ -1746,19 +1703,15 @@ function showNextError() {
         errorText: block.content.substring(error.error_start, error.error_end)
     });
     
-    // Mettre à jour le compteur
     document.getElementById('spellcheck-counter').textContent = 
         `${currentSpellIndex + 1} / ${spellErrors.length}`;
     
-    // Afficher l'information du bloc
     document.getElementById('spellcheck-block-info').textContent = 
         `Bloc: ${block.type}${block.number}`;
     
-    // Afficher le contexte avec l'erreur en surbrillance
     const contextText = document.getElementById('spellcheck-context-text');
     const blockContent = block.content;
     
-    // Vérifier que les positions sont valides
     if (error.error_start >= 0 && error.error_end <= blockContent.length && error.error_start < error.error_end) {
         const beforeError = blockContent.substring(0, error.error_start);
         const errorText = blockContent.substring(error.error_start, error.error_end);
@@ -1766,15 +1719,12 @@ function showNextError() {
         
         contextText.innerHTML = `${beforeError}<span class="highlight">${errorText}</span>${afterError}`;
     } else {
-        // Position invalide, afficher le contenu complet
         contextText.innerHTML = `<span class="highlight">Erreur de position</span>${blockContent}`;
         console.error('Position d\'erreur invalide:', error);
     }
     
-    // Afficher le message d'erreur
     document.getElementById('spellcheck-error-message').textContent = error.message;
     
-    // Afficher les suggestions
     const suggestionsList = document.getElementById('spellcheck-suggestions-list');
     suggestionsList.innerHTML = '';
     
@@ -1789,34 +1739,25 @@ function showNextError() {
                 </button>
             `;
             
-            // Gestionnaire pour sélectionner une suggestion
             suggestionItem.addEventListener('click', () => {
-                // Désélectionner toutes les suggestions
                 suggestionsList.querySelectorAll('.suggestion-item').forEach(item => {
                     item.classList.remove('selected');
                 });
                 
-                // Sélectionner cette suggestion
                 suggestionItem.classList.add('selected');
-                
-                // Activer le bouton Appliquer
                 document.getElementById('spellcheck-apply').disabled = false;
             });
             
             suggestionsList.appendChild(suggestionItem);
         });
     } else {
-        // Aucune suggestion disponible
         const noSuggestions = document.createElement('div');
         noSuggestions.className = 'suggestion-item';
         noSuggestions.innerHTML = '<span class="suggestion-text">Aucune suggestion disponible</span>';
         suggestionsList.appendChild(noSuggestions);
-        
-        // Désactiver le bouton Appliquer
         document.getElementById('spellcheck-apply').disabled = true;
     }
     
-    // Mettre à jour l'état des boutons
     document.getElementById('spellcheck-apply').disabled = true;
     document.getElementById('spellcheck-back').disabled = currentSpellIndex === 0;
 }
@@ -1834,7 +1775,6 @@ async function applySpellcheckCorrection() {
     const suggestionText = selectedSuggestion.querySelector('.suggestion-text').textContent;
     
     try {
-        // Appeler l'API pour appliquer la correction
         const response = await fetch('/api/apply-correction', {
             method: 'POST',
             headers: {
@@ -1851,20 +1791,15 @@ async function applySpellcheckCorrection() {
         if (response.ok) {
             const data = await response.json();
             
-            // Sauvegarder l'état avant modification pour l'historique
             spellHistory.push({
                 blockIndex: error.block_index,
                 oldContent: data.original,
                 errorIndex: currentSpellIndex
             });
             
-            // Mettre à jour le bloc en mémoire
             blocks[error.block_index].content = data.corrected;
-            
-            // Mettre à jour l'affichage
             renderBlocks();
             
-            // Passer à l'erreur suivante
             currentSpellIndex++;
             showNextError();
             
@@ -1900,7 +1835,6 @@ async function undoLastSpellcheck() {
         const block = blocks[lastAction.blockIndex];
         
         try {
-            // Restaurer le contenu via l'API
             const response = await fetch('/api/apply-correction', {
                 method: 'POST',
                 headers: {
@@ -1917,13 +1851,9 @@ async function undoLastSpellcheck() {
             if (response.ok) {
                 const data = await response.json();
                 
-                // Restaurer le contenu
                 block.content = data.corrected;
-                
-                // Mettre à jour l'affichage
                 renderBlocks();
                 
-                // Revenir à l'erreur correspondante
                 currentSpellIndex = lastAction.errorIndex;
                 showNextError();
                 
@@ -1952,13 +1882,11 @@ async function askAi(blockIndex) {
         return;
     }
     
-    // Stocker les informations pour la reformulation
     currentReformulationBlockIndex = blockIndex;
     currentReformulationContent = block.content;
     currentReformulationIntention = '';
     currentReformulationCustom = '';
     
-    // Ouvrir le modal de sélection d'intention
     openReformulationModal();
 }
 
@@ -1968,34 +1896,28 @@ function openReformulationModal() {
     const generateBtn = document.getElementById('generate-reformulation');
     const customTextarea = document.getElementById('custom-intention');
     
-    // Réinitialiser l'interface
     document.querySelectorAll('.intention-option').forEach(option => {
         option.classList.remove('selected');
     });
     customTextarea.value = '';
     generateBtn.disabled = true;
     
-    // Afficher le modal
     modal.classList.remove('hidden');
     setTimeout(() => {
         modal.classList.add('show');
     }, 10);
     
-    // Supprimer les anciens gestionnaires d'événements
     document.querySelectorAll('.intention-option').forEach(option => {
         option.removeEventListener('click', handleIntentionClick);
     });
     
-    // Ajouter les nouveaux gestionnaires d'événements pour les options
     document.querySelectorAll('.intention-option').forEach(option => {
         option.addEventListener('click', handleIntentionClick);
     });
     
-    // Gestionnaire pour le textarea personnalisé
     customTextarea.removeEventListener('input', handleCustomIntention);
     customTextarea.addEventListener('input', handleCustomIntention);
     
-    // Gestionnaire pour le bouton générer
     generateBtn.removeEventListener('click', generateReformulation);
     generateBtn.addEventListener('click', generateReformulation);
 }
@@ -2013,7 +1935,6 @@ function handleCustomIntention(event) {
     const generateBtn = document.getElementById('generate-reformulation');
     
     if (customTextarea.value.trim()) {
-        // Désélectionner toutes les autres options
         document.querySelectorAll('.intention-option').forEach(option => {
             if (option !== customOption) {
                 option.classList.remove('selected');
@@ -2035,35 +1956,28 @@ function handleCustomIntention(event) {
 
 // Sélectionner une intention
 function selectIntention(optionElement) {
-    // Désélectionner toutes les options
     document.querySelectorAll('.intention-option').forEach(option => {
         option.classList.remove('selected');
     });
     
-    // Sélectionner l'option cliquée
     optionElement.classList.add('selected');
     
-    // Mettre à jour les variables
     currentReformulationIntention = optionElement.dataset.intention;
     currentReformulationCustom = '';
     
-    // Vider le textarea personnalisé si on sélectionne une autre option
     if (currentReformulationIntention !== 'custom') {
         const customTextarea = document.getElementById('custom-intention');
         customTextarea.value = '';
     }
     
-    // Activer le bouton générer
     const generateBtn = document.getElementById('generate-reformulation');
     generateBtn.disabled = false;
     
-    // Focus sur le textarea si c'est l'option personnalisée
     if (currentReformulationIntention === 'custom') {
         const customTextarea = document.getElementById('custom-intention');
         customTextarea.focus();
     }
     
-    // Feedback visuel
     showToast(`Intention sélectionnée : ${optionElement.querySelector('h4').textContent}`, 'info');
 }
 
@@ -2078,11 +1992,9 @@ async function generateReformulation() {
     const originalText = generateBtn.innerHTML;
     
     try {
-        // Afficher le spinner
         generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
         generateBtn.disabled = true;
         
-        // Appeler l'API de reformulation
         const response = await fetch('/api/reformulate', {
             method: 'POST',
             headers: {
@@ -2104,10 +2016,7 @@ async function generateReformulation() {
         const data = await response.json();
         
         if (data.status === 'success') {
-            // Fermer le modal de sélection
             closeReformulationModal();
-            
-            // Afficher les résultats
             displayReformulationResults(data.suggestions);
         } else {
             throw new Error(data.error || 'Erreur inconnue');
@@ -2117,7 +2026,6 @@ async function generateReformulation() {
         console.error('Reformulation error:', error);
         showToast(`Erreur: ${error.message}`, 'error');
     } finally {
-        // Restaurer le bouton
         generateBtn.innerHTML = originalText;
         generateBtn.disabled = false;
     }
@@ -2129,10 +2037,8 @@ function displayReformulationResults(suggestions) {
     const resultsContainer = document.getElementById('reformulation-results');
     const template = document.getElementById('reformulation-suggestion-template');
     
-    // Vider le conteneur
     resultsContainer.innerHTML = '';
     
-    // Ajouter chaque suggestion
     suggestions.forEach((suggestion, index) => {
         const suggestionElement = document.importNode(template.content, true).firstElementChild;
         const contentDiv = suggestionElement.querySelector('.suggestion-content');
@@ -2140,7 +2046,6 @@ function displayReformulationResults(suggestions) {
         
         contentDiv.textContent = suggestion;
         
-        // Gestionnaire pour appliquer la suggestion
         applyBtn.addEventListener('click', () => {
             applyReformulationSuggestion(suggestion);
         });
@@ -2148,13 +2053,11 @@ function displayReformulationResults(suggestions) {
         resultsContainer.appendChild(suggestionElement);
     });
     
-    // Gestionnaire pour régénérer
     document.getElementById('regenerate-reformulation').addEventListener('click', () => {
         closeReformulationResultsModal();
         openReformulationModal();
     });
     
-    // Afficher le modal
     modal.classList.remove('hidden');
     setTimeout(() => {
         modal.classList.add('show');
@@ -2169,10 +2072,8 @@ function applyReformulationSuggestion(suggestion) {
         saveData();
         renderBlocks();
         
-        // Fermer le modal des résultats
         closeReformulationResultsModal();
         
-        // Faire défiler vers le bloc modifié
         const blockElements = document.querySelectorAll('.block');
         if (currentReformulationBlockIndex < blockElements.length) {
             blockElements[currentReformulationBlockIndex].scrollIntoView({ 
@@ -2211,7 +2112,6 @@ function acceptSuggestion(blockIndex, suggestion) {
     
     pushHistory();
     
-    // Si c'est une suggestion OCR, extraire le texte sans le préfixe [OCR: ]
     if (suggestion.startsWith('[OCR: ')) {
         suggestion = suggestion.replace('[OCR: ', '').replace(']', '');
     }
@@ -2219,7 +2119,6 @@ function acceptSuggestion(blockIndex, suggestion) {
     block.content = suggestion;
     saveData();
     
-    // Supprimer les suggestions de ce bloc
     if (aiMap[blockIndex]) {
         delete aiMap[blockIndex];
     }
@@ -2232,76 +2131,58 @@ function acceptSuggestion(blockIndex, suggestion) {
 
 // Toggle project sidebar
 function toggleProjectSidebar(show) {
-    // Get current visibility state
     const isVisible = projectSidebar.getAttribute('data-visible') === 'true';
     
     if (show === undefined) {
-        // Toggle mode - invert current state
         projectSidebar.setAttribute('data-visible', isVisible ? 'false' : 'true');
     } else {
-        // Explicit mode
         projectSidebar.setAttribute('data-visible', show ? 'true' : 'false');
     }
 }
 
 // Toggle tools sidebar
 function toggleToolsSidebar(show) {
-    // Get current visibility state
     const isVisible = toolsSidebar.getAttribute('data-visible') === 'true';
     
     if (show === undefined) {
-        // Toggle mode - invert current state
         toolsSidebar.setAttribute('data-visible', isVisible ? 'false' : 'true');
     } else {
-        // Explicit mode
         toolsSidebar.setAttribute('data-visible', show ? 'true' : 'false');
     }
 }
 
 // Toggle theme
 function toggleTheme() {
-    // Reset timer and increment click count
     clearTimeout(themeClickTimer);
     themeClickCount++;
     
-    // Set timer to reset click count after 1 second
     themeClickTimer = setTimeout(() => {
         themeClickCount = 0;
     }, 1000);
     
-    // Cycle through themes based on click count
     if (themeClickCount >= 3) {
-        // Third+ click within 1 second - obsidian theme
         theme = 'obsidian';
-        themeClickCount = 0; // Reset after reaching obsidian
+        themeClickCount = 0;
     } else if (theme === 'light') {
-        // Light to dark
         theme = 'dark';
     } else if (theme === 'dark' && themeClickCount < 3) {
-        // Dark to light (unless rapid clicking for obsidian)
         theme = 'light';
     } else if (theme === 'obsidian') {
-        // Obsidian to light
         theme = 'light';
     }
     
-    // Save and apply theme
     localStorage.setItem('wtoon-theme', theme);
     setTheme(theme);
     
-    // Show toast with theme name
     let themeName = theme === 'light' ? 'clair' : (theme === 'dark' ? 'sombre' : 'obsidienne');
     showToast(`Thème ${themeName} activé`, 'info');
 }
 
 // Set theme
 function setTheme(newTheme) {
-    // Remove all theme classes first
     document.body.classList.remove('light', 'dark', 'obsidian');
-    // Add the current theme class
     document.body.classList.add(newTheme);
     
-    // Update theme button icon
     const themeBtn = document.getElementById('btn-theme');
     if (newTheme === 'light') {
         themeBtn.innerHTML = '<i class="fas fa-moon"></i>';
@@ -2336,16 +2217,13 @@ function renderCustomTypes() {
     
     if (!container) return;
     
-    // Clear container
     container.innerHTML = '';
     
-    // If no custom types, show message
     if (customTypes.length === 0) {
         container.innerHTML = '<p class="info-text">Aucun type personnalisé</p>';
         return;
     }
     
-    // Add each custom type with delete button
     customTypes.forEach(type => {
         const typeItem = document.createElement('div');
         typeItem.className = 'custom-type-item';
@@ -2359,11 +2237,10 @@ function renderCustomTypes() {
         deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
         deleteBtn.title = 'Supprimer ce type';
         deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation(); // Éviter la propagation du clic
+            e.stopPropagation();
             deleteCustomType(type);
         });
         
-        // Animation d'entrée
         typeItem.style.opacity = '0';
         setTimeout(() => {
             typeItem.style.opacity = '1';
@@ -2377,25 +2254,21 @@ function renderCustomTypes() {
 
 // Delete a custom type
 function deleteCustomType(type) {
-    // Confirm deletion
     if (!confirm(`Êtes-vous sûr de vouloir supprimer le type "${type}" ?`)) {
         return;
     }
     
-    // Check if type is used by any blocks
     const usedBlocks = blocks.filter(block => block.type === type);
     if (usedBlocks.length > 0) {
         if (!confirm(`Ce type est utilisé par ${usedBlocks.length} bloc(s). Ces blocs seront également supprimés. Voulez-vous continuer ?`)) {
             return;
         }
         
-        // Remove all blocks of this type
-        pushHistory(); // Save state for undo
+        pushHistory();
         blocks = blocks.filter(block => block.type !== type);
         document.getElementById('btn-undo').disabled = false;
     }
     
-    // Trouver l'élément à supprimer
     const container = document.getElementById('custom-types-container');
     const items = container.querySelectorAll('.custom-type-item');
     let itemToRemove = null;
@@ -2407,32 +2280,24 @@ function deleteCustomType(type) {
         }
     });
     
-    // Animation de sortie
     if (itemToRemove) {
         itemToRemove.style.opacity = '0';
         itemToRemove.style.transform = 'scale(0.8)';
         
-        // Attendre la fin de l'animation avant de supprimer
         setTimeout(() => {
-            // Remove from customTypes
             customTypes = customTypes.filter(t => t !== type);
-            
-            // Remove from blockTypes
             blockTypes = blockTypes.filter(t => t !== type);
             
-            // Update UI
             renderCustomTypes();
             renderBlockTypeButtons();
-            renderBlocks(); // Re-render blocks to reflect changes
-            updateBlockCount(); // Update block count
+            renderBlocks();
+            updateBlockCount();
             
-            // Save changes
             saveData();
             
             showToast(`Type "${type}" et ses blocs associés supprimés`, 'success');
         }, 300);
     } else {
-        // Fallback si l'élément n'est pas trouvé
         customTypes = customTypes.filter(t => t !== type);
         blockTypes = blockTypes.filter(t => t !== type);
         renderCustomTypes();
@@ -2450,33 +2315,22 @@ function deleteBlock(index) {
     
     const block = blocks[index];
     
-    // Confirm deletion
     if (!confirm(`Êtes-vous sûr de vouloir supprimer ce bloc ${block.type}${block.number} ?`)) {
         return;
     }
     
-    // Save state for undo
     pushHistory();
-    
-    // Remove the block
     blocks.splice(index, 1);
     
-    // Update block numbers for remaining blocks of the same type
     const sameTypeBlocks = blocks.filter(b => b.type === block.type);
     sameTypeBlocks.forEach((b, i) => {
         b.number = i + 1;
     });
     
-    // Update UI
     renderBlocks();
     updateBlockCount();
-    
-    // Save changes
     saveData();
-    
-    // Enable undo button
     document.getElementById('btn-undo').disabled = false;
-    
     showToast(`Bloc ${block.type}${block.number} supprimé`, 'success');
 }
 
@@ -2488,22 +2342,18 @@ async function extractWebtoon() {
         return;
     }
     
-    // Check if URL is valid
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url;
     }
     
-    // Remove @ symbol if present (common when copying URLs)
     if (url.startsWith('@http')) {
         url = url.substring(1);
     }
     
-    // Update the input field with the cleaned URL
     webtoonUrlInput.value = url;
     
     await heavyOperation(async () => {
         try {
-            // Show loading state
             btnExtractWebtoon.disabled = true;
             btnExtractFirecrawl.disabled = true;
             extractionStatus.textContent = 'Extraction en cours...';
@@ -2512,14 +2362,12 @@ async function extractWebtoon() {
             extractionProgress.querySelector('.progress-bar').style.width = '10%';
             extractedImagesContainer.innerHTML = '';
             
-            // Call the API to extract images
             const response = await fetch('/api/extract-webtoon', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
             });
             
-            // Update progress
             extractionProgress.querySelector('.progress-bar').style.width = '50%';
             
             if (!response.ok) {
@@ -2529,17 +2377,13 @@ async function extractWebtoon() {
             
             const data = await response.json();
             
-            // Update progress
             extractionProgress.querySelector('.progress-bar').style.width = '80%';
             
             if (data.images && data.images.length > 0) {
-                // Display extracted images
                 displayExtractedImages(data.images);
-                
                 extractionStatus.textContent = `${data.images.length} images extraites avec succès`;
                 extractionStatus.className = 'status-message success';
                 
-                // Open project sidebar if it's not already open
                 if (projectSidebar.getAttribute('data-visible') === 'false') {
                     projectSidebar.setAttribute('data-visible', 'true');
                 }
@@ -2552,7 +2396,6 @@ async function extractWebtoon() {
             extractionStatus.textContent = `Erreur: ${error.message}`;
             extractionStatus.className = 'status-message error';
         } finally {
-            // Complete progress bar
             extractionProgress.querySelector('.progress-bar').style.width = '100%';
             setTimeout(() => {
                 extractionProgress.classList.remove('active');
@@ -2573,22 +2416,18 @@ async function extractFirecrawl() {
         return;
     }
     
-    // Check if URL is valid
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
         url = 'https://' + url;
     }
     
-    // Remove @ symbol if present (common when copying URLs)
     if (url.startsWith('@http')) {
         url = url.substring(1);
     }
     
-    // Update the input field with the cleaned URL
     webtoonUrlInput.value = url;
     
     await heavyOperation(async () => {
         try {
-            // Show loading state
             showToast('Extraction Firecrawl démarrée...', 'info');
             btnExtractWebtoon.disabled = true;
             btnExtractFirecrawl.disabled = true;
@@ -2598,17 +2437,15 @@ async function extractFirecrawl() {
             extractionProgress.querySelector('.progress-bar').style.width = '10%';
             extractedImagesContainer.innerHTML = '';
         
-            // Call the API to extract images using Firecrawl
             const response = await fetch('/api/extract-firecrawl', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     url, 
-                    api_key: firecrawlKey || undefined  // Only send if provided
+                    api_key: firecrawlKey || undefined
                 })
             });
             
-            // Update progress
             extractionProgress.querySelector('.progress-bar').style.width = '50%';
             
             if (!response.ok) {
@@ -2618,17 +2455,13 @@ async function extractFirecrawl() {
             
             const data = await response.json();
             
-            // Update progress
             extractionProgress.querySelector('.progress-bar').style.width = '80%';
             
             if (data.images && data.images.length > 0) {
-                // Display extracted images
                 displayExtractedImages(data.images);
-                
                 extractionStatus.textContent = `${data.images.length} images extraites avec succès via Firecrawl`;
                 extractionStatus.className = 'status-message success';
                 
-                // Open project sidebar if it's not already open
                 if (projectSidebar.getAttribute('data-visible') === 'false') {
                     projectSidebar.setAttribute('data-visible', 'true');
                 }
@@ -2641,7 +2474,6 @@ async function extractFirecrawl() {
             extractionStatus.textContent = `Erreur Firecrawl: ${error.message}`;
             extractionStatus.className = 'status-message error';
         } finally {
-            // Complete progress bar
             extractionProgress.querySelector('.progress-bar').style.width = '100%';
             setTimeout(() => {
                 extractionProgress.classList.remove('active');
@@ -2665,83 +2497,65 @@ function displayExtractedImages(images) {
     console.log(`Affichage de ${images.length} images dans le conteneur`);
     extractedImagesContainer.innerHTML = '';
     
-    // Store images in a global variable for navigation
     window.extractedImages = images;
     
-    // Créer tous les éléments d'images
     const fragment = document.createDocumentFragment();
     
     images.forEach((image, index) => {
         try {
-        // Clone the template
-        const imageElement = extractedImageTemplate.content.cloneNode(true);
-        
-            // Set image source with error handling
-        const thumbnail = imageElement.querySelector('.thumbnail');
+            const imageElement = extractedImageTemplate.content.cloneNode(true);
+            const thumbnail = imageElement.querySelector('.thumbnail');
             
-            // Définir un gestionnaire d'erreur avant de définir la source
             thumbnail.onerror = function() {
-                this.onerror = null; // Éviter les boucles infinies
+                this.onerror = null;
                 console.error(`Erreur de chargement de l'image ${index}:`, image.url);
-                this.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiPkltYWdlIGludHJvdXZhYmxlPC90ZXh0Pjwvc3ZnPg=='; // Image d'erreur
+                this.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2YwZjBmMCIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMjAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM5OTkiPkltYWdlIGludHJvdXZhYmxlPC90ZXh0Pjwvc3ZnPg==';
                 this.alt = 'Image introuvable';
             };
             
-        thumbnail.src = image.url;
+            thumbnail.src = image.url;
             thumbnail.alt = image.filename || `Image ${index + 1}`;
         
-        // Add event listener to the view button
-        const viewBtn = imageElement.querySelector('.view-btn');
-        viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
-        viewBtn.addEventListener('click', () => {
-            showExtractedImage(image, index);
-        });
+            const viewBtn = imageElement.querySelector('.view-btn');
+            viewBtn.innerHTML = '<i class="fas fa-eye"></i> Voir';
+            viewBtn.addEventListener('click', () => {
+                showExtractedImage(image, index);
+            });
+            
+            const useBtn = imageElement.querySelector('.use-btn');
+            if (useBtn) {
+                useBtn.remove();
+            }
         
-        // Remove the use button as it's redundant
-        const useBtn = imageElement.querySelector('.use-btn');
-        if (useBtn) {
-            useBtn.remove();
-        }
-        
-            // Add to fragment (plus efficace pour de nombreux éléments)
             fragment.appendChild(imageElement);
         } catch (error) {
             console.error(`Erreur lors de l'ajout de l'image ${index}:`, error);
         }
     });
     
-    // Add all images to container in one operation
     extractedImagesContainer.appendChild(fragment);
     
-    // Log le résultat
     console.log(`${extractedImagesContainer.children.length} éléments d'images ajoutés au conteneur`);
 }
 
 // Show extracted image in viewer
 function showExtractedImage(image, index) {
-    // Show the viewer
     openViewer();
 
-    // Clear any previous content
     pdfContainer.innerHTML = '';
     
-    // Remove any existing navigation controls
     const existingControls = imageContainer.querySelector('.image-nav-controls');
     if (existingControls) {
         existingControls.remove();
     }
     
-    // Remove existing navigation arrows if any
     const existingArrows = document.querySelectorAll('.image-nav-arrow, .image-counter');
     existingArrows.forEach(arrow => arrow.remove());
     
-    // Set file name in the viewer
     viewerFilename.textContent = image.filename;
     
-    // Reset zoom before loading new image
     currentZoom = 1.0;
     
-    // Create and add image navigation controls
     const navControls = document.createElement('div');
     navControls.className = 'image-nav-controls';
     
@@ -2769,7 +2583,6 @@ function showExtractedImage(image, index) {
     zoomLevel.className = 'zoom-level';
     zoomLevel.textContent = '100%';
     
-    // Add help text for Ctrl+wheel zoom
     const zoomHelp = document.createElement('span');
     zoomHelp.className = 'zoom-help';
     zoomHelp.innerHTML = '<i class="fas fa-info-circle"></i> Ctrl+Molette pour zoomer';
@@ -2783,43 +2596,33 @@ function showExtractedImage(image, index) {
     
     imageContainer.appendChild(navControls);
     
-    // Make sure image container is visible and PDF container is hidden
     imageContainer.style.display = 'flex';
     pdfContainer.style.display = 'none';
     
-    // Display the image
-    console.log("Setting image source to:", image.url);
     imageViewer.src = image.url;
     imageViewer.style.display = 'block';
     imageViewer.style.transform = `scale(${currentZoom})`;
     
     console.log("Total images:", window.extractedImages?.length, "Current index:", index);
     
-    // Configure navigation buttons if we have multiple images
     if (window.extractedImages && window.extractedImages.length > 1) {
-        // Enable/disable navigation buttons based on position
         btnPrevPage.disabled = index <= 0;
         btnNextPage.disabled = index >= window.extractedImages.length - 1;
         
-        // Update page info to show image position
         pageInfo.textContent = `${index + 1} / ${window.extractedImages.length}`;
         
-        // Set up navigation button click handlers
         btnPrevPage.onclick = function() {
             if (index > 0) {
-                console.log("Previous button clicked");
                 showExtractedImage(window.extractedImages[index - 1], index - 1);
             }
         };
         
         btnNextPage.onclick = function() {
             if (index < window.extractedImages.length - 1) {
-                console.log("Next button clicked");
                 showExtractedImage(window.extractedImages[index + 1], index + 1);
             }
         };
         
-        // Add keyboard navigation
         const handleKeyNav = (e) => {
             if (e.key === 'ArrowLeft' && index > 0) {
                 showExtractedImage(window.extractedImages[index - 1], index - 1);
@@ -2828,44 +2631,31 @@ function showExtractedImage(image, index) {
             }
         };
         
-        // Remove existing listener if any
         document.removeEventListener('keydown', window.currentKeyNavHandler);
         
-        // Add new listener
         window.currentKeyNavHandler = handleKeyNav;
         document.addEventListener('keydown', window.currentKeyNavHandler);
     } else {
-        // Disable navigation if only one image
         btnPrevPage.disabled = true;
         btnNextPage.disabled = true;
         pageInfo.textContent = '';
     }
     
-    // Check if this is a webtoon format image after it loads
     imageViewer.onload = function() {
-        console.log("Image loaded:", this.naturalWidth, "x", this.naturalHeight);
         const aspectRatio = this.naturalWidth / this.naturalHeight;
         
-        // If image is tall and narrow (typical webtoon format)
         if (aspectRatio < 0.5) {
-            // Add webtoon format class
             imageViewer.classList.add('webtoon-format');
-            
-            // Auto fit to width for better viewing
             setTimeout(fitImageToWidth, 100);
         } else {
             imageViewer.classList.remove('webtoon-format');
             resetImageZoom();
         }
         
-        // Update zoom level display
         updateZoomLevelDisplay();
-        
-        // Show a toast notification about Ctrl+wheel zoom
         showToast('Utilisez Ctrl+Molette pour zoomer, ou les boutons de contrôle', 'info');
     };
     
-    // Add wheel zoom functionality
     imageContainer.onwheel = handleImageWheel;
 }
 
@@ -2874,13 +2664,9 @@ function fitImageToWidth() {
     const containerWidth = imageContainer.clientWidth;
     const imageWidth = imageViewer.naturalWidth;
     
-    // Calculate zoom to fit width (with small margin)
     currentZoom = (containerWidth * 0.95) / imageWidth;
     
-    // Apply zoom
     applyImageZoom();
-    
-    // Scroll to top
     imageContainer.scrollTop = 0;
 }
 
@@ -2888,17 +2674,12 @@ function fitImageToWidth() {
 function resetImageZoom() {
     currentZoom = 1.0;
     applyImageZoom();
-    
-    // Center the image
     imageContainer.scrollTop = 0;
 }
 
 // Apply image zoom
 function applyImageZoom() {
-    // Apply zoom transform
     imageViewer.style.transform = `scale(${currentZoom})`;
-    
-    // Update zoom level display
     updateZoomLevelDisplay();
 }
 
@@ -2912,57 +2693,43 @@ function updateZoomLevelDisplay() {
 
 // Handle mouse wheel on image
 function handleImageWheel(e) {
-    // Only handle zoom if Ctrl key is pressed, otherwise allow normal scrolling
     if (!e.ctrlKey) {
-        return; // Allow default scrolling behavior when Ctrl is not pressed
+        return;
     }
     
-    // Prevent default scrolling when Ctrl is pressed
     e.preventDefault();
     
-    // Get mouse position relative to container
     const rect = imageContainer.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
     
-    // Get scroll position before zoom
     const scrollXBefore = imageContainer.scrollLeft;
     const scrollYBefore = imageContainer.scrollTop;
     
-    // Calculate position on image
     const imageX = scrollXBefore + mouseX;
     const imageY = scrollYBefore + mouseY;
     
-    // Calculate zoom change
     const delta = -e.deltaY;
     const zoomChange = delta > 0 ? 1.1 : 0.9;
     
-    // Apply zoom
     const oldZoom = currentZoom;
     currentZoom *= zoomChange;
     
-    // Limit zoom range
     currentZoom = Math.max(0.1, Math.min(currentZoom, 5.0));
     
-    // Apply zoom
     applyImageZoom();
     
-    // Calculate new scroll position to keep mouse point fixed
     const zoomRatio = currentZoom / oldZoom;
     const newScrollX = imageX * zoomRatio - mouseX;
     const newScrollY = imageY * zoomRatio - mouseY;
     
-    // Set new scroll position
     imageContainer.scrollLeft = newScrollX;
     imageContainer.scrollTop = newScrollY;
 }
 
 // Use extracted image (add a block with reference)
 function useExtractedImage(image) {
-    // Show the image in the viewer panel instead of creating a block
     showExtractedImage(image);
-    
-    // Show toast
     showToast('Image ouverte dans la fenêtre d\'affichage');
 }
 
@@ -2972,11 +2739,9 @@ async function loadApiKeys() {
         const response = await fetch('/api/get-keys');
         const keys = await response.json();
         
-        // Update keys in memory
         geminiKey = keys.gemini || '';
         firecrawlKey = keys.firecrawl || '';
         
-        // Update UI
         geminiKeyInput.value = geminiKey;
         firecrawlKeyInput.value = firecrawlKey;
     } catch (error) {
@@ -3002,20 +2767,17 @@ async function saveApiKeys(gemini, firecrawl) {
 
 // Cleanup uploads
 async function cleanupUploads() {
-    // Confirm before cleaning up
     if (!confirm('Êtes-vous sûr de vouloir nettoyer le dossier uploads ?\n\nCela supprimera tous les dossiers de webtoons sauf le plus récent.\nLes images utilisées dans votre projet sont sauvegardées lors de l\'exportation.')) {
         return;
     }
     
     await heavyOperation(async () => {
         try {
-            // Show loading state
             extractionStatus.textContent = 'Nettoyage en cours...';
             extractionStatus.className = 'status-message';
             extractionProgress.classList.add('active');
             extractionProgress.querySelector('.progress-bar').style.width = '50%';
         
-            // Call the cleanup API
             const response = await fetch('/api/cleanup', {
                 method: 'POST'
             });
@@ -3027,14 +2789,10 @@ async function cleanupUploads() {
             
             const data = await response.json();
             
-            // Update progress
             extractionProgress.querySelector('.progress-bar').style.width = '100%';
-            
-            // Show success message
             extractionStatus.textContent = data.message;
             extractionStatus.className = 'status-message success';
             
-            // Show detailed statistics in a toast
             const stats = data.stats;
             const detailedMessage = `
                 Avant: ${stats.before.directories} dossiers, ${stats.before.files} fichiers
@@ -3049,7 +2807,6 @@ async function cleanupUploads() {
             extractionStatus.className = 'status-message error';
             showToast('Erreur lors du nettoyage des uploads', 'error');
         } finally {
-            // Hide progress bar after a delay
             setTimeout(() => {
                 extractionProgress.classList.remove('active');
                 extractionProgress.querySelector('.progress-bar').style.width = '0';
@@ -3063,17 +2820,14 @@ async function downloadExampleJson() {
     try {
         showToast('Téléchargement de l\'exemple JSON...', 'info');
         
-        // Appeler l'API pour récupérer l'exemple
         const response = await fetch('/api/example-json');
         
         if (!response.ok) {
             throw new Error('Erreur lors de la récupération de l\'exemple');
         }
         
-        // Récupérer le contenu en blob
         const blob = await response.blob();
         
-        // Créer un lien de téléchargement
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -3081,7 +2835,6 @@ async function downloadExampleJson() {
         document.body.appendChild(a);
         a.click();
         
-        // Nettoyer
         setTimeout(() => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
@@ -3099,17 +2852,14 @@ async function downloadExampleZip() {
     try {
         showToast('Téléchargement de l\'exemple ZIP...', 'info');
         
-        // Appeler l'API pour récupérer l'exemple
         const response = await fetch('/api/example-zip');
         
         if (!response.ok) {
             throw new Error('Erreur lors de la récupération de l\'exemple');
         }
         
-        // Récupérer le contenu en blob
         const blob = await response.blob();
         
-        // Créer un lien de téléchargement
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -3117,7 +2867,6 @@ async function downloadExampleZip() {
         document.body.appendChild(a);
         a.click();
         
-        // Nettoyer
         setTimeout(() => {
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
@@ -3133,32 +2882,26 @@ async function downloadExampleZip() {
 // Capture d'écran et traduction IA
 async function captureAndTranslate() {
     try {
-        // Vérifier si le lecteur est ouvert
         if (viewerPanel.classList.contains('hidden')) {
             showToast('Ouvrez d\'abord un fichier dans le lecteur', 'warning');
             return;
         }
         
-        // Vérifier si la clé Gemini est configurée
         if (!geminiKey) {
             showToast('Configurez d\'abord votre clé Gemini dans les outils', 'warning');
             return;
         }
         
-        // Déterminer quelle zone capturer
         let targetElement;
         if (currentPDFDoc) {
-            // Si c'est un PDF, capturer le conteneur PDF
             targetElement = pdfContainer;
         } else if (imageViewer.style.display !== 'none') {
-            // Si c'est une image, capturer le conteneur d'image
             targetElement = imageContainer;
         } else {
             showToast('Aucun contenu à capturer', 'warning');
             return;
         }
         
-        // Activer le mode de sélection de zone
         showToast('Sélectionnez la zone à traduire en cliquant et glissant', 'info');
         await enableZoneSelection(targetElement);
         
@@ -3171,11 +2914,9 @@ async function captureAndTranslate() {
 // Activer la sélection de zone
 async function enableZoneSelection(targetElement) {
     return new Promise((resolve) => {
-        // Créer l'overlay de sélection
         const overlay = document.createElement('div');
         overlay.id = 'zone-selection-overlay';
         
-        // Créer la zone de sélection
         const selectionBox = document.createElement('div');
         selectionBox.id = 'zone-selection-box';
         
@@ -3185,7 +2926,6 @@ async function enableZoneSelection(targetElement) {
         let isSelecting = false;
         let startX, startY, endX, endY;
         
-        // Fonction pour mettre à jour la zone de sélection
         function updateSelectionBox() {
             const left = Math.min(startX, endX);
             const top = Math.min(startY, endY);
@@ -3198,7 +2938,6 @@ async function enableZoneSelection(targetElement) {
             selectionBox.style.height = height + 'px';
         }
         
-        // Gestionnaire de clic pour commencer la sélection
         function startSelection(e) {
             isSelecting = true;
             startX = e.clientX || e.touches[0].clientX;
@@ -3211,7 +2950,6 @@ async function enableZoneSelection(targetElement) {
             selectionBox.style.height = '0px';
         }
         
-        // Gestionnaire de mouvement pour redimensionner la sélection
         function updateSelection(e) {
             if (!isSelecting) return;
             
@@ -3222,13 +2960,11 @@ async function enableZoneSelection(targetElement) {
             updateSelectionBox();
         }
         
-        // Gestionnaire de relâchement pour finaliser la sélection
         async function endSelection(e) {
             if (!isSelecting) return;
             
             isSelecting = false;
             
-            // Vérifier que la sélection a une taille minimale
             const width = Math.abs(endX - startX);
             const height = Math.abs(endY - startY);
             
@@ -3237,25 +2973,20 @@ async function enableZoneSelection(targetElement) {
                 return;
             }
             
-            // Masquer l'overlay
             document.body.removeChild(overlay);
             
-            // Capturer la zone sélectionnée
             await captureSelectedZone(targetElement, startX, startY, endX, endY);
             resolve();
         }
         
-        // Événements souris
         overlay.addEventListener('mousedown', startSelection);
         overlay.addEventListener('mousemove', updateSelection);
         overlay.addEventListener('mouseup', endSelection);
         
-        // Événements tactiles
         overlay.addEventListener('touchstart', startSelection, { passive: false });
         overlay.addEventListener('touchmove', updateSelection, { passive: false });
         overlay.addEventListener('touchend', endSelection, { passive: false });
         
-        // Gestionnaire d'échappement pour annuler
         const handleEscape = (e) => {
             if (e.key === 'Escape') {
                 document.body.removeChild(overlay);
@@ -3267,7 +2998,6 @@ async function enableZoneSelection(targetElement) {
         
         document.addEventListener('keydown', handleEscape);
         
-        // Instructions visuelles
         const instructions = document.createElement('div');
         instructions.className = 'zone-selection-instructions';
         instructions.innerHTML = `
@@ -3283,23 +3013,20 @@ async function captureSelectedZone(targetElement, startX, startY, endX, endY) {
     try {
         showToast('Capture de la zone sélectionnée...', 'info');
         
-        // Capturer l'écran complet avec html2canvas
         const canvas = await html2canvas(targetElement, {
             useCORS: true,
             allowTaint: true,
             backgroundColor: '#ffffff',
-            scale: 2, // Haute résolution pour un meilleur OCR
+            scale: 2,
             logging: false
         });
         
-        // Calculer les coordonnées relatives à l'élément cible
         const targetRect = targetElement.getBoundingClientRect();
-        const relativeStartX = (startX - targetRect.left) * 2; // *2 pour le scale
+        const relativeStartX = (startX - targetRect.left) * 2;
         const relativeStartY = (startY - targetRect.top) * 2;
         const relativeEndX = (endX - targetRect.left) * 2;
         const relativeEndY = (endY - targetRect.top) * 2;
         
-        // Créer un nouveau canvas avec la zone sélectionnée
         const croppedCanvas = document.createElement('canvas');
         const croppedCtx = croppedCanvas.getContext('2d');
         
@@ -3309,7 +3036,6 @@ async function captureSelectedZone(targetElement, startX, startY, endX, endY) {
         croppedCanvas.width = cropWidth;
         croppedCanvas.height = cropHeight;
         
-        // Dessiner la zone sélectionnée
         croppedCtx.drawImage(
             canvas,
             Math.min(relativeStartX, relativeEndX),
@@ -3324,7 +3050,6 @@ async function captureSelectedZone(targetElement, startX, startY, endX, endY) {
         
         showToast('Analyse du texte en cours...', 'info');
         
-        // Convertir en blob et envoyer
         croppedCanvas.toBlob(async (blob) => {
             if (!blob) {
                 showToast('Erreur lors de la capture de la zone', 'error');
@@ -3367,7 +3092,6 @@ async function captureSelectedZone(targetElement, startX, startY, endX, endY) {
 
 // Afficher les suggestions de traduction dans le dernier bloc
 function displayTranslationSuggestionsInBlock(data) {
-    // Trouver le dernier bloc de texte (pas un commentaire)
     let lastBlockIndex = -1;
     for (let i = blocks.length - 1; i >= 0; i--) {
         if (blocks[i].type !== 'C' && blocks[i].type !== 'HC') {
@@ -3376,44 +3100,35 @@ function displayTranslationSuggestionsInBlock(data) {
         }
     }
     
-    // Si aucun bloc trouvé, créer un nouveau bloc
     if (lastBlockIndex === -1) {
         addBlock('B');
         lastBlockIndex = blocks.length - 1;
     }
     
-    // Stocker les suggestions dans aiMap pour qu'elles persistent
     if (!aiMap[lastBlockIndex]) {
         aiMap[lastBlockIndex] = {};
     }
     
-    // Préparer les suggestions avec le texte OCR
     let suggestions = [];
     
-    // Ajouter le texte OCR comme première suggestion si disponible
     if (data.ocr && data.ocr.trim()) {
         suggestions.push(`[OCR: ${data.ocr}]`);
     }
     
-    // Ajouter les suggestions de traduction
     if (data.suggestions && data.suggestions.length > 0) {
         suggestions = suggestions.concat(data.suggestions);
     }
     
-    // Si aucune suggestion, ajouter un message
     if (suggestions.length === 0) {
         suggestions.push('Aucune suggestion disponible');
     }
     
-    // Stocker les suggestions
     aiMap[lastBlockIndex].suggestions = suggestions;
     aiMap[lastBlockIndex].sourceLang = data.sourceLang || 'unknown';
     aiMap[lastBlockIndex].ocrText = data.ocr || '';
     
-    // Re-rendre les blocs pour afficher les suggestions
     renderBlocks();
     
-    // Faire défiler vers le bloc
     const blockElements = document.querySelectorAll('.block');
     if (lastBlockIndex < blockElements.length) {
         blockElements[lastBlockIndex].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -3421,6 +3136,94 @@ function displayTranslationSuggestionsInBlock(data) {
     
     showToast(`Suggestions ajoutées au bloc ${blocks[lastBlockIndex].type}${blocks[lastBlockIndex].number}`, 'success');
 }
+
+
+// =================================================================
+// NOUVELLES FONCTIONS POUR LE GLOSSAIRE
+// =================================================================
+
+/**
+ * Affiche le glossaire éditable dans le tableau HTML.
+ */
+function renderGlossary() {
+    if (!editableGlossaryTableBody) return;
+
+    editableGlossaryTableBody.innerHTML = '';
+
+    if (glossary.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="4" class="info-text">Aucun terme. Cliquez sur "Ajouter".</td>`;
+        editableGlossaryTableBody.appendChild(tr);
+        return;
+    }
+
+    glossary.forEach((term, index) => {
+        const tr = document.createElement('tr');
+
+        // Crée une cellule éditable
+        const createCell = (content, key) => {
+            const td = document.createElement('td');
+            td.textContent = content;
+            td.contentEditable = "true";
+            td.addEventListener('blur', () => {
+                // Mettre à jour l'objet glossary lorsque l'utilisateur a fini d'éditer
+                glossary[index][key] = td.textContent.trim();
+                scheduleAutoSave();
+            });
+            return td;
+        };
+        
+        tr.appendChild(createCell(term.vo, 'vo'));
+        tr.appendChild(createCell(term.vf, 'vf'));
+        tr.appendChild(createCell(term.note, 'note'));
+
+        // Bouton de suppression
+        const actionTd = document.createElement('td');
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'glossary-delete-btn';
+        deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+        deleteBtn.title = 'Supprimer ce terme';
+        deleteBtn.addEventListener('click', () => deleteGlossaryTerm(index));
+        actionTd.appendChild(deleteBtn);
+        tr.appendChild(actionTd);
+
+        editableGlossaryTableBody.appendChild(tr);
+    });
+}
+
+/**
+ * Ajoute un nouveau terme vide au glossaire.
+ */
+function addGlossaryTerm() {
+    glossary.unshift({ vo: 'Nouveau terme', vf: '', note: '' }); // Ajoute au début pour une meilleure visibilité
+    renderGlossary();
+    scheduleAutoSave();
+
+    // Focus sur la première cellule du nouveau terme
+    const firstRow = editableGlossaryTableBody.querySelector('tr:first-child');
+    if (firstRow) {
+        const firstCell = firstRow.querySelector('td');
+        if (firstCell) {
+            firstCell.focus();
+            // Sélectionne le texte pour le remplacer facilement
+            document.execCommand('selectAll', false, null); 
+        }
+    }
+}
+
+/**
+ * Supprime un terme du glossaire à un index donné.
+ * @param {number} index - L'index du terme à supprimer.
+ */
+function deleteGlossaryTerm(index) {
+    if (confirm(`Supprimer le terme "${glossary[index].vo || 'vide'}" ?`)) {
+        glossary.splice(index, 1);
+        renderGlossary();
+        scheduleAutoSave();
+        showToast('Terme supprimé', 'success');
+    }
+}
+
 
 // Initialize app when DOM is loaded
 document.addEventListener('DOMContentLoaded', init);

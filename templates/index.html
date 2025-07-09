@@ -102,7 +102,11 @@
                 <header>
                     <button id="btn-toggle-project"><i class="fas fa-bars"></i></button>
                     <h2><i class="fas fa-edit"></i> Éditeur Webtoon</h2>
-                    <button id="btn-toggle-tools"><i class="fas fa-tools"></i></button>
+                    <!-- MODIFIÉ : Ajout du bouton Glossaire -->
+                    <div class="main-header-buttons">
+                        <button id="btn-toggle-glossary" title="Afficher le glossaire (Ctrl+G)"><i class="fas fa-book"></i></button>
+                        <button id="btn-toggle-tools"><i class="fas fa-tools"></i></button>
+                    </div>
                 </header>
 
                 <!-- Liste des blocs -->
@@ -155,7 +159,90 @@
                 <p>Aucun rapport.</p>
             </div>
         </aside>
-    </div>
+
+        <!-- AJOUTÉ : Panneau latéral du Glossaire -->
+        <aside id="glossary-sidebar" class="sidebar" data-visible="false">
+            <h3>
+                <i class="fas fa-book-open"></i> Glossaire
+            </h3>
+        
+            <!-- Section du glossaire éditable -->
+            <h4>
+                <i class="fas fa-edit"></i> Termes du Projet
+                <button id="btn-add-glossary-term" class="btn-sm btn-primary" title="Ajouter un terme">
+                    <i class="fas fa-plus"></i> Ajouter
+                </button>
+            </h4>
+            <div class="glossary-container">
+                <table id="editable-glossary-table" class="glossary-table">
+                    <thead>
+                        <tr>
+                            <th>VO</th>
+                            <th>VF</th>
+                            <th>Remarque</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Les termes seront insérés ici par JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        
+            <!-- Section de l'aide-mémoire fixe -->
+            <hr>
+            <h4>
+                <i class="fas fa-lightbulb"></i> Aide-mémoire (Onomatopées)
+            </h4>
+            <div class="glossary-container">
+                <table class="glossary-table fixed-glossary-table">
+                    <thead>
+                        <tr>
+                            <th>VO</th>
+                            <th>VF</th>
+                            <th>Remarque</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>HUH</td><td>HEIN/EUH</td><td></td></tr>
+                        <tr><td>UH</td><td>EUH/HUM/HM</td><td></td></tr>
+                        <tr><td>COUGH</td><td>KOF/PFF</td><td></td></tr>
+                        <tr><td>UMM</td><td>HUM/EUH</td><td></td></tr>
+                        <tr><td>WELL</td><td>EH BIEN</td><td class="note">Dépend du contexte !!</td></tr>
+                        <tr><td>EX: FIRE</td><td>DU FEU</td><td class="note">Ajoutez un truc devant</td></tr>
+                        <tr><td>SIGH</td><td>HAA/FIOU</td><td></td></tr>
+                        <tr><td>TSK</td><td>TSS</td><td></td></tr>
+                        <tr><td>HEY</td><td>HÉ</td><td></td></tr>
+                        <tr><td>PHEW</td><td>FIOU</td><td></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <h4><i class="fas fa-exclamation-triangle"></i> Alternatives possibles</h4>
+            <div class="glossary-container">
+                <table class="glossary-table fixed-glossary-table">
+                    <thead>
+                        <tr>
+                            <th>VO</th>
+                            <th>VF</th>
+                            <th>Remarque</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>ALRIGHT</td><td>(TRÈS) BIEN / D'ACCORD</td><td></td></tr>
+                        <tr><td>WOW</td><td>WHOA / OUAH</td><td></td></tr>
+                        <tr><td>(OH) MY GOD / GOSH...</td><td>(OH) MON DIEU</td><td></td></tr>
+                        <tr><td>CRY</td><td>SNIF / OUIN</td><td></td></tr>
+                        <tr><td>DAMN / JEEZ / GOODNESS</td><td>BON SANG</td><td class="note">Reproche / Colère</td></tr>
+                        <tr><td>SHIT</td><td>MERDE / FAIT CHIER</td><td></td></tr>
+                        <tr><td>SIR</td><td>SIRE / MONSIEUR</td><td class="note">Dépend contexte historique</td></tr>
+                        <tr><td>SMIRK</td><td>HIHI / HÉHÉ / NIARK</td><td class="note">Sourire sournois</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </aside>
+
+    </div> <!-- Fin du .app -->
 
     <!-- Block Template (hidden) -->
     <template id="block-template">
@@ -340,4 +427,4 @@
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
 </body>
-</html> 
+</html>

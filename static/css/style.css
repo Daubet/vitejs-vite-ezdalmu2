@@ -660,9 +660,7 @@ textarea {
     position: relative;
 }
 
-header, footer {
-    background: var(--sidebar);
-    border-bottom: 1px solid var(--border);
+header {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -671,9 +669,8 @@ header, footer {
     position: relative;
     z-index: 10;
     box-shadow: var(--shadow);
-}
-
-header {
+    border-bottom: 1px solid var(--border);
+    background: var(--sidebar);
     justify-content: space-between;
 }
 
@@ -684,6 +681,12 @@ header h2 {
     font-weight: 600;
 }
 
+/* MODIFIÉ : Conteneur pour les boutons droits de l'en-tête */
+.main-header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
 header button {
     padding: 10px;
     border-radius: 50%;
@@ -692,10 +695,17 @@ header button {
 }
 
 footer {
+    background: var(--sidebar);
     border-top: 1px solid var(--border);
-    border-bottom: none;
-    flex-wrap: wrap;
+    display: flex;
+    align-items: center;
     gap: 8px;
+    padding: 12px 20px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    box-shadow: var(--shadow);
+    flex-wrap: wrap;
 }
 
 .scroll {
@@ -734,11 +744,8 @@ footer {
     position: relative;
 }
 
-/*
- * L'ancienne animation .block a été supprimée.
- * Elle est maintenant gérée par .new-block-fade-in
- * pour ne s'appliquer qu'aux nouveaux blocs.
-*/
+/* MODIFIÉ : Suppression de l'ancienne animation bloquante */
+/* L'animation est désormais gérée par .new-block-fade-in */
 
 .block strong {
     display: inline-block;
@@ -928,9 +935,7 @@ hr {
     margin: 18px 0;
 }
 
-/* Animations
--------------------------------------------------- */
-/* Animation pour l'ajout fluide d'un nouveau bloc */
+/* AJOUTÉ : Animation pour l'ajout fluide d'un nouveau bloc */
 .new-block-fade-in {
     animation: newBlockFadeInAnimation 0.35s ease-out forwards;
 }
@@ -2175,4 +2180,107 @@ hr {
         width: 100%;
         margin: 0;
     }
+}
+
+
+/* --- AJOUTÉ : STYLES POUR LE GLOSSAIRE --- */
+
+#btn-toggle-glossary {
+    background-color: var(--secondary);
+    color: white;
+    border-color: var(--secondary);
+}
+#btn-toggle-glossary:hover {
+    filter: brightness(1.1);
+    background-color: var(--secondary);
+}
+
+.glossary-container {
+    max-height: 250px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background-color: var(--bg);
+}
+
+.glossary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.glossary-table th,
+.glossary-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.glossary-table th {
+    background-color: var(--bg-light);
+    color: var(--primary);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.glossary-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.glossary-table tbody tr:hover {
+    background-color: var(--primary-light);
+}
+
+.glossary-table td[contenteditable="true"] {
+    cursor: text;
+    background-color: transparent;
+    transition: background-color 0.2s;
+}
+
+.glossary-table td[contenteditable="true"]:focus {
+    background-color: white;
+    box-shadow: inset 0 0 0 2px var(--primary);
+    outline: none;
+    border-radius: 4px;
+}
+
+.glossary-table .note {
+    font-style: italic;
+    color: var(--text-light);
+    font-size: 0.8rem;
+}
+
+.glossary-delete-btn {
+    background: transparent;
+    border: none;
+    color: var(--warning);
+    cursor: pointer;
+    font-size: 0.9rem;
+    opacity: 0.6;
+    transition: all 0.2s;
+    padding: 4px;
+}
+
+.glossary-delete-btn:hover {
+    opacity: 1;
+    transform: scale(1.1) rotate(5deg);
+}
+
+#btn-add-glossary-term {
+    margin-left: auto;
+}
+
+/* Ensure h4 has flex properties for alignment */
+.sidebar h4 {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+/* Align add button to the right */
+.sidebar h4 > button {
+    margin-left: auto;
 }

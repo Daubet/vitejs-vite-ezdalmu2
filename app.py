@@ -57,7 +57,8 @@ def get_default_data():
         'api_keys': {
             'gemini': '',
             'firecrawl': ''
-        }
+        },
+        'glossary': []  # <-- AJOUT: Glossaire par défaut
     }
 
 # Load project data
@@ -65,7 +66,10 @@ def load_data():
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Assurer la rétrocompatibilité pour les anciens projets
+                data.setdefault('glossary', []) 
+                return data
         except Exception as e:
             logging.error(f"Error loading data: {str(e)}")
             return get_default_data()
@@ -109,9 +113,12 @@ def api_save():
     current_data = load_data()
     current_data['blocks'] = data.get('blocks', current_data['blocks'])
     current_data['blockTypes'] = data.get('blockTypes', current_data['blockTypes'])
+    # <-- AJOUT: Sauvegarde du glossaire
+    current_data['glossary'] = data.get('glossary', current_data.get('glossary', []))
     
     save_data(current_data)
     return jsonify({"status": "success"})
+
 
 # ----------  API KEYS ----------
 @app.route('/api/get-keys')

@@ -452,7 +452,7 @@
     },
     {
       "comment": "",
-      "content": "Il m'a utilisée.",
+      "content": "Son maniement de l'épée est excellent mais top 10 avec seulement ca, c'est...",
       "number": 68,
       "type": "B"
     },
@@ -473,12 +473,6 @@
       "content": "Je dois maitriser plus que simplement agiter une épée.",
       "number": 8,
       "type": "C"
-    },
-    {
-      "type": "DB",
-      "number": 4,
-      "content": "Il m'a utilisée.",
-      "comment": ""
     }
   ],
   "blockTypes": [
@@ -489,7 +483,14 @@
     "HC"
   ],
   "api_keys": {
-    "gemini": "AIzaSyD3cpynpKcO9b-WZ4iO3MpBIQhUkrxa72M",
-    "firecrawl": "fc-4e2ef9d083654a49ab17a5dc27888c03"
-  }
+    "gemini": "",
+    "firecrawl": ""
+  },
+  "glossary": [
+    {
+      "vo": "ranking",
+      "vf": "classement",
+      "note": ""
+    }
+  ]
 }
