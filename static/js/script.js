@@ -26,6 +26,13 @@ let spellErrors = [];
 let currentSpellIndex = 0;
 let spellHistory = [];
 
+// --- auto-save debounce --------------------------------
+let autoSaveTimer = null;
+function scheduleAutoSave() {
+    clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(() => saveData({showSpinner:false}), 800);
+}
+
 // DOM references
 const blocksContainer = document.getElementById('blocks-container');
 const blockTypesButtons = document.getElementById('block-types-buttons');
@@ -312,7 +319,7 @@ function handleKeyboardShortcuts(e) {
     // Ctrl/Cmd + S for save
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        saveData();
+        saveData({ showSpinner: true });
         showToast('Projet sauvegardé');
     }
 }
@@ -494,106 +501,110 @@ function setupResizablePanel() {
     }
 }
 
+// Wrapper for heavy operations that should show a spinner
+async function heavyOperation(fn) {
+    showLoading(true);
+    try {
+        await fn();
+    } finally {
+        showLoading(false);
+    }
+}
+
 // Handle PDF upload
-function handlePDFUpload(e) {
+async function handlePDFUpload(e) {
     const file = e.target.files[0];
     if (!file || file.type !== 'application/pdf') return;
-    
-    // Show loading indicator
-    showLoading(true);
-    
-    // Upload file to server
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    fetch('/api/upload-reader', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        // Show the viewer
-        openViewer();
 
-        // Clear any previous content
-        pdfContainer.innerHTML = '';
-        imageViewer.style.display = 'none';
-        
-        // Set file name in the viewer
-        viewerFilename.textContent = data.filename;
-        
-        // Load the PDF from server
-        return fetch(data.url)
-            .then(response => response.arrayBuffer())
-            .then(arrayBuffer => {
-                loadPdfFromData(new Uint8Array(arrayBuffer));
+    await heavyOperation(async () => {
+        try {
+            // Upload file to server
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/upload-reader', {
+                method: 'POST',
+                body: formData
             });
-    })
-    .catch(error => {
-        console.error('Upload error:', error);
-        showToast('Erreur lors du téléchargement du fichier', 'error');
-    })
-    .finally(() => {
-        showLoading(false);
-        // Reset file input
-        e.target.value = null;
+
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Show the viewer
+            openViewer();
+
+            // Clear any previous content
+            pdfContainer.innerHTML = '';
+            imageViewer.style.display = 'none';
+            
+            // Set file name in the viewer
+            viewerFilename.textContent = data.filename;
+            
+            // Load the PDF from server
+            const pdfResponse = await fetch(data.url);
+            const arrayBuffer = await pdfResponse.arrayBuffer();
+            await loadPdfFromData(new Uint8Array(arrayBuffer));
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Erreur lors du téléchargement du fichier', 'error');
+        } finally {
+            // Reset file input
+            e.target.value = null;
+        }
     });
 }
 
 // Handle image upload
-function handleImageUpload(e) {
+async function handleImageUpload(e) {
     const file = e.target.files[0];
     if (!file || !file.type.startsWith('image/')) return;
-    
-    // Show loading indicator
-    showLoading(true);
-    
-    // Upload file to server
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    fetch('/api/upload-reader', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        
-        // Show the viewer
-        openViewer();
 
-        // Clear any previous content
-        pdfContainer.innerHTML = '';
-        
-        // Set file name in the viewer
-        viewerFilename.textContent = data.filename;
-        
-        // Disable PDF navigation
-        btnPrevPage.disabled = true;
-        btnNextPage.disabled = true;
-        pageInfo.textContent = '';
-        
-        // Display the image
-        imageViewer.src = data.url;
-        imageViewer.style.display = 'block';
-        currentZoom = 1.0;
-        imageViewer.style.transform = `scale(${currentZoom})`;
-    })
-    .catch(error => {
-        console.error('Upload error:', error);
-        showToast('Erreur lors du téléchargement de l\'image', 'error');
-    })
-    .finally(() => {
-        showLoading(false);
-        // Reset file input
-        e.target.value = null;
+    await heavyOperation(async () => {
+        try {
+            // Upload file to server
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const response = await fetch('/api/upload-reader', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Show the viewer
+            openViewer();
+
+            // Clear any previous content
+            pdfContainer.innerHTML = '';
+            
+            // Set file name in the viewer
+            viewerFilename.textContent = data.filename;
+            
+            // Disable PDF navigation
+            btnPrevPage.disabled = true;
+            btnNextPage.disabled = true;
+            pageInfo.textContent = '';
+            
+            // Display the image
+            imageViewer.src = data.url;
+            imageViewer.style.display = 'block';
+            currentZoom = 1.0;
+            imageViewer.style.transform = `scale(${currentZoom})`;
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            showToast('Erreur lors du téléchargement de l\'image', 'error');
+        } finally {
+            // Reset file input
+            e.target.value = null;
+        }
     });
 }
 
@@ -632,61 +643,56 @@ async function loadPdfFromData(data) {
 async function renderAllPDFPages(container) {
     if (!currentPDFDoc) return;
     
-    try {
-        // Show loading indicator
-        showLoading(true);
-        
-        // Calculate a reasonable scale based on container width
-        const containerWidth = container.clientWidth || pdfContainer.clientWidth;
-        const firstPage = await currentPDFDoc.getPage(1);
-        const firstViewport = firstPage.getViewport({ scale: 1.0 });
-        
-        // Calculate scale to fit page width
-        const baseScale = Math.min((containerWidth - 20) / firstViewport.width, 1.5);
-        currentZoom = baseScale;
-        
-        // Render each page with spacing
-        for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-            // Get the page
-            const page = await currentPDFDoc.getPage(pageNum);
+    await heavyOperation(async () => {
+        try {
+            // Calculate a reasonable scale based on container width
+            const containerWidth = container.clientWidth || pdfContainer.clientWidth;
+            const firstPage = await currentPDFDoc.getPage(1);
+            const firstViewport = firstPage.getViewport({ scale: 1.0 });
             
-            // Create a wrapper for this page
-            const pageWrapper = document.createElement('div');
-            pageWrapper.className = 'pdf-page-wrapper';
-            pageWrapper.dataset.pageNum = pageNum;
-            container.appendChild(pageWrapper);
+            // Calculate scale to fit page width
+            const baseScale = Math.min((containerWidth - 20) / firstViewport.width, 1.5);
+            currentZoom = baseScale;
             
-            // Create a canvas for rendering
-            const canvas = document.createElement('canvas');
-            pageWrapper.appendChild(canvas);
-            
-            // Add page number indicator
-            const pageLabel = document.createElement('div');
-            pageLabel.className = 'pdf-page-label';
-            pageLabel.textContent = `${pageNum} / ${totalPages}`;
-            pageWrapper.appendChild(pageLabel);
-            
-            // Calculate viewport with current zoom
-            const viewport = page.getViewport({ scale: currentZoom });
-            
-            // Set canvas dimensions
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-            
-            // Render the page
-            await page.render({
-                canvasContext: canvas.getContext('2d'),
-                viewport: viewport
-            }).promise;
+            // Render each page with spacing
+            for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+                // Get the page
+                const page = await currentPDFDoc.getPage(pageNum);
+                
+                // Create a wrapper for this page
+                const pageWrapper = document.createElement('div');
+                pageWrapper.className = 'pdf-page-wrapper';
+                pageWrapper.dataset.pageNum = pageNum;
+                container.appendChild(pageWrapper);
+                
+                // Create a canvas for rendering
+                const canvas = document.createElement('canvas');
+                pageWrapper.appendChild(canvas);
+                
+                // Add page number indicator
+                const pageLabel = document.createElement('div');
+                pageLabel.className = 'pdf-page-label';
+                pageLabel.textContent = `${pageNum} / ${totalPages}`;
+                pageWrapper.appendChild(pageLabel);
+                
+                // Calculate viewport with current zoom
+                const viewport = page.getViewport({ scale: currentZoom });
+                
+                // Set canvas dimensions
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                // Render the page
+                await page.render({
+                    canvasContext: canvas.getContext('2d'),
+                    viewport: viewport
+                }).promise;
+            }
+        } catch (error) {
+            console.error('Error rendering PDF pages:', error);
+            showToast('Erreur lors du rendu des pages PDF', 'error');
         }
-        
-        // Hide loading indicator
-        showLoading(false);
-    } catch (error) {
-        console.error('Error rendering PDF pages:', error);
-        showToast('Erreur lors du rendu des pages PDF', 'error');
-        showLoading(false);
-    }
+    });
 }
 
 // Zoom in
@@ -720,29 +726,25 @@ async function applyZoom() {
     const scrollContainer = document.querySelector('.pdf-scroll-container');
     if (!scrollContainer || !currentPDFDoc) return;
     
-    try {
-        // Show loading while rezoom
-        showLoading(true);
-        
-        // Store current scroll position as a percentage
-        const scrollPercentage = pdfContainer.scrollTop / pdfContainer.scrollHeight;
-        
-        // Clear the container
-        scrollContainer.innerHTML = '';
-        
-        // Re-render all pages with new zoom
-        await renderAllPDFPages(scrollContainer);
-        
-        // Restore scroll position by percentage
-        setTimeout(() => {
-            pdfContainer.scrollTop = scrollPercentage * pdfContainer.scrollHeight;
-        }, 50);
-        
-        showLoading(false);
-    } catch (error) {
-        console.error('Error applying zoom:', error);
-        showLoading(false);
-    }
+    await heavyOperation(async () => {
+        try {
+            // Store current scroll position as a percentage
+            const scrollPercentage = pdfContainer.scrollTop / pdfContainer.scrollHeight;
+            
+            // Clear the container
+            scrollContainer.innerHTML = '';
+            
+            // Re-render all pages with new zoom
+            await renderAllPDFPages(scrollContainer);
+            
+            // Restore scroll position by percentage
+            setTimeout(() => {
+                pdfContainer.scrollTop = scrollPercentage * pdfContainer.scrollHeight;
+            }, 50);
+        } catch (error) {
+            console.error('Error applying zoom:', error);
+        }
+    });
 }
 
 // Adjust the nextPage and prevPage functions for the new scroll view
@@ -831,29 +833,28 @@ function closeViewer() {
 
 // Load data from API
 async function loadData() {
-    showLoading(true);
-    try {
-        const response = await fetch('/api/load');
-        const data = await response.json();
-        blocks = data.blocks || [];
-        blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
-        
-        // Séparer les types par défaut des types personnalisés
-        const defaultTypes = ['HB', 'B', 'DB', 'C', 'HC'];
-        customTypes = blockTypes.filter(type => !defaultTypes.includes(type));
-        
-        history = [];
-        aiMap = {};
-        renderBlocks();
-        renderBlockTypeButtons();
-        renderCustomTypes(); // Afficher les types personnalisés
-        updateBlockCount();
-        showLoading(false);
-    } catch (error) {
-        console.error('Failed to load data:', error);
-        showToast('Erreur lors du chargement', 'error');
-        showLoading(false);
-    }
+    await heavyOperation(async () => {
+        try {
+            const response = await fetch('/api/load');
+            const data = await response.json();
+            blocks = data.blocks || [];
+            blockTypes = data.blockTypes || ['HB', 'B', 'DB', 'C', 'HC'];
+            
+            // Séparer les types par défaut des types personnalisés
+            const defaultTypes = ['HB', 'B', 'DB', 'C', 'HC'];
+            customTypes = blockTypes.filter(type => !defaultTypes.includes(type));
+            
+            history = [];
+            aiMap = {};
+            renderBlocks();
+            renderBlockTypeButtons();
+            renderCustomTypes(); // Afficher les types personnalisés
+            updateBlockCount();
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            showToast('Erreur lors du chargement', 'error');
+        }
+    });
 }
 
 // Show loading indicator
@@ -875,19 +876,20 @@ function showLoading(show) {
 }
 
 // Save data to API
-async function saveData() {
+async function saveData(opts = {showSpinner: false}) {
+    const {showSpinner} = opts;
     try {
-        showLoading(true);
+        if (showSpinner) showLoading(true);
         await fetch('/api/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ blocks, blockTypes })
         });
-        showLoading(false);
     } catch (error) {
         console.error('Failed to save data:', error);
         showToast('Erreur lors de la sauvegarde', 'error');
-        showLoading(false);
+    } finally {
+        if (showSpinner) showLoading(false);
     }
 }
 
@@ -943,93 +945,78 @@ function createRipple(e) {
     button.appendChild(circle);
 }
 
-// Render blocks
+// **NEW** Creates a DOM element for a single block
+function createBlockElement(block, index) {
+    const blockEl = document.importNode(blockTemplate.content, true).firstElementChild;
+    const strongEl = blockEl.querySelector('strong');
+    const textareaEl = blockEl.querySelector('textarea');
+    const aiBtn = blockEl.querySelector('.ai-btn');
+    const commentBtn = blockEl.querySelector('.comment-btn');
+    const deleteBtn = blockEl.querySelector('.delete-btn');
+    const commentContainer = blockEl.querySelector('.comment-container');
+    const commentTextarea = blockEl.querySelector('.comment-textarea');
+    const suggestionsEl = blockEl.querySelector('.suggestions');
+
+    strongEl.textContent = block.type + block.number;
+    textareaEl.value = block.content;
+
+    if (block.comment) {
+        commentTextarea.value = block.comment;
+        commentContainer.style.display = 'block';
+        commentBtn.classList.add('active');
+    }
+
+    textareaEl.setAttribute('data-min-rows', '2');
+    autoResizeTextarea(textareaEl);
+    commentTextarea.setAttribute('data-min-rows', '1');
+    autoResizeTextarea(commentTextarea);
+
+    textareaEl.addEventListener('input', (e) => {
+        pushHistory();
+        block.content = e.target.value;
+        autoResizeTextarea(e.target);
+        scheduleAutoSave();
+        document.getElementById('btn-undo').disabled = false;
+    });
+
+    commentTextarea.addEventListener('input', (e) => {
+        block.comment = e.target.value;
+        autoResizeTextarea(e.target);
+        scheduleAutoSave();
+    });
+
+    commentBtn.addEventListener('click', () => {
+        commentContainer.style.display = commentContainer.style.display === 'none' ? 'block' : 'none';
+        commentBtn.classList.toggle('active');
+        if (commentContainer.style.display === 'block') {
+            commentTextarea.focus();
+            autoResizeTextarea(commentTextarea);
+        }
+    });
+
+    aiBtn.addEventListener('click', () => askAi(index));
+    deleteBtn.addEventListener('click', () => deleteBlock(index));
+
+    if (aiMap[index] && aiMap[index].suggestions && aiMap[index].suggestions.length) {
+        renderSuggestions(suggestionsEl, aiMap[index].suggestions, index);
+    }
+    
+    // Set opacity to 1 to avoid the default staggered animation on full re-renders
+    blockEl.style.opacity = 1;
+
+    return blockEl;
+}
+
+
+// **MODIFIED** Renders all blocks from scratch (used for initial load, import, delete)
 function renderBlocks() {
     blocksContainer.innerHTML = '';
-    
     blocks.forEach((block, index) => {
-        const blockEl = document.importNode(blockTemplate.content, true).firstElementChild;
-        const strongEl = blockEl.querySelector('strong');
-        const textareaEl = blockEl.querySelector('textarea');
-        const aiBtn = blockEl.querySelector('.ai-btn');
-        const commentBtn = blockEl.querySelector('.comment-btn');
-        const deleteBtn = blockEl.querySelector('.delete-btn');
-        const commentContainer = blockEl.querySelector('.comment-container');
-        const commentTextarea = blockEl.querySelector('.comment-textarea');
-        const suggestionsEl = blockEl.querySelector('.suggestions');
-        
-        strongEl.textContent = block.type + block.number;
-        textareaEl.value = block.content;
-        
-        // Set comment if exists
-        if (block.comment) {
-            commentTextarea.value = block.comment;
-            commentContainer.style.display = 'block';
-            commentBtn.classList.add('active');
-        }
-        
-        // Add animation delay
-        blockEl.style.animationDelay = `${index * 0.05}s`;
-        
-        // Auto resize textarea
-        textareaEl.setAttribute('data-min-rows', '2');
-        autoResizeTextarea(textareaEl);
-        
-        // Auto resize comment textarea
-        commentTextarea.setAttribute('data-min-rows', '1');
-        autoResizeTextarea(commentTextarea);
-        
-        // Update block content
-        textareaEl.addEventListener('input', (e) => {
-            pushHistory();
-            block.content = e.target.value;
-            autoResizeTextarea(e.target);
-            saveData();
-            document.getElementById('btn-undo').disabled = false;
-        });
-        
-        // Update comment content
-        commentTextarea.addEventListener('input', (e) => {
-            block.comment = e.target.value;
-            autoResizeTextarea(e.target);
-            saveData();
-        });
-        
-        // Toggle comment visibility
-        commentBtn.addEventListener('click', () => {
-            commentContainer.style.display = commentContainer.style.display === 'none' ? 'block' : 'none';
-            commentBtn.classList.toggle('active');
-            if (commentContainer.style.display === 'block') {
-                commentTextarea.focus();
-                autoResizeTextarea(commentTextarea);
-            }
-        });
-        
-        // AI button
-        aiBtn.addEventListener('click', () => askAi(index));
-        
-        // Gestionnaire d'événements pour le bouton de suppression
-        deleteBtn.addEventListener('click', () => deleteBlock(index));
-        
-        // Render AI suggestions if they exist
-        if (aiMap[index] && aiMap[index].suggestions && aiMap[index].suggestions.length) {
-            renderSuggestions(suggestionsEl, aiMap[index].suggestions, index);
-        }
-        
-        blocksContainer.appendChild(blockEl);
+        const el = createBlockElement(block, index);
+        blocksContainer.appendChild(el);
     });
-    
-    // Scroll to bottom if adding a new block
-    if (blocks.length > 0 && blocks[blocks.length - 1].content === '') {
-        blocksContainer.scrollTop = blocksContainer.scrollHeight;
-        
-        // Focus last textarea
-        const textareas = blocksContainer.querySelectorAll('textarea');
-        if (textareas.length > 0) {
-            textareas[textareas.length - 1].focus();
-        }
-    }
 }
+
 
 // Auto resize textarea
 function autoResizeTextarea(textarea) {
@@ -1105,17 +1092,31 @@ function renderSuggestions(container, suggestions, blockIndex) {
     container.appendChild(hideBtn);
 }
 
-// Add block
+// **MODIFIED** Add block efficiently without re-rendering everything
 function addBlock(type) {
     pushHistory();
     const nextNumber = Math.max(0, ...blocks.filter(b => b.type === type).map(b => b.number)) + 1;
-    blocks.push({ type, number: nextNumber, content: '', comment: '' });
-    saveData();
-    renderBlocks();
+    const newBlock = { type, number: nextNumber, content: '', comment: '' };
+    blocks.push(newBlock);
+
+    // Create and append only the new block element
+    const newBlockElement = createBlockElement(newBlock, blocks.length - 1);
+    
+    // Add a class for a subtle fade-in animation
+    newBlockElement.classList.add('new-block-fade-in');
+    
+    blocksContainer.appendChild(newBlockElement);
+    
+    // Scroll to the new block and focus its textarea
+    newBlockElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    newBlockElement.querySelector('textarea').focus();
+
     updateBlockCount();
+    scheduleAutoSave();
     document.getElementById('btn-undo').disabled = false;
     showToast(`Bloc ${type}${nextNumber} ajouté`, 'success');
 }
+
 
 // Push history
 function pushHistory() {
@@ -1127,7 +1128,7 @@ function undo() {
     if (history.length === 0) return;
     
     blocks = history.pop();
-    saveData();
+    scheduleAutoSave();
     renderBlocks();
     updateBlockCount();
     
@@ -1136,80 +1137,78 @@ function undo() {
 
 // Export project to ZIP format (uses new backend endpoint)
 async function exportZip() {
-    try {
-        showLoading(true);
-        showToast('Création du fichier ZIP...', 'info');
-        
-        // Call the backend endpoint to create the ZIP
-        const response = await fetch('/api/export-zip');
-        
-                if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erreur de serveur');
-                }
-                
-        // Get the ZIP file as a blob
-                const blob = await response.blob();
-                
-        // Create a URL for the blob
-        const url = URL.createObjectURL(blob);
-        
-        // Create a download link
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'webtoon_export.zip';
-        document.body.appendChild(a);
-        
-        // Click the download link
-        a.click();
-        
-        // Clean up
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        
-        showToast('Export ZIP réussi', 'success');
-    } catch (error) {
-        console.error('Export ZIP error:', error);
-        showToast('Erreur lors de l\'export ZIP: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
+    await heavyOperation(async () => {
+        try {
+            showToast('Création du fichier ZIP...', 'info');
+            
+            // Call the backend endpoint to create the ZIP
+            const response = await fetch('/api/export-zip');
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erreur de serveur');
+            }
+                    
+            // Get the ZIP file as a blob
+            const blob = await response.blob();
+                    
+            // Create a URL for the blob
+            const url = URL.createObjectURL(blob);
+            
+            // Create a download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'webtoon_export.zip';
+            document.body.appendChild(a);
+            
+            // Click the download link
+            a.click();
+            
+            // Clean up
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            showToast('Export ZIP réussi', 'success');
+        } catch (error) {
+            console.error('Export ZIP error:', error);
+            showToast('Erreur lors de l\'export ZIP: ' + error.message, 'error');
+        }
+    });
 }
 
 // Import project
 async function importProject(e) {
     const file = e.target.files[0];
     if (!file) return;
-    
-    showLoading(true);
-    
-    try {
-        console.log(`Fichier à importer: ${file.name}, type: ${file.type}, taille: ${file.size} octets`);
-        
-        // Check if it's a ZIP file (new format) or JSON file (old format)
-        const isZip = file.type === 'application/zip' || 
-                     file.type === 'application/x-zip-compressed' || 
-                     file.name.toLowerCase().endsWith('.zip') ||
-                     file.name.toLowerCase().endsWith('.wtoon');
-        
-        console.log(`Format détecté: ${isZip ? 'ZIP/WTOON' : 'JSON'}`);
-        
-        if (isZip) {
-            // Handle ZIP format (new format)
-            await importZipProject(file);
-            showToast('Projet importé avec succès (format ZIP)', 'success');
-        } else {
-            // Handle JSON format (old format)
-            await importJsonProject(file);
-            showToast('Projet importé avec succès (format JSON)', 'success');
+
+    await heavyOperation(async () => {
+        try {
+            console.log(`Fichier à importer: ${file.name}, type: ${file.type}, taille: ${file.size} octets`);
+            
+            // Check if it's a ZIP file (new format) or JSON file (old format)
+            const isZip = file.type === 'application/zip' || 
+                         file.type === 'application/x-zip-compressed' || 
+                         file.name.toLowerCase().endsWith('.zip') ||
+                         file.name.toLowerCase().endsWith('.wtoon');
+            
+            console.log(`Format détecté: ${isZip ? 'ZIP/WTOON' : 'JSON'}`);
+            
+            if (isZip) {
+                // Handle ZIP format (new format)
+                await importZipProject(file);
+                showToast('Projet importé avec succès (format ZIP)', 'success');
+            } else {
+                // Handle JSON format (old format)
+                await importJsonProject(file);
+                showToast('Projet importé avec succès (format JSON)', 'success');
+            }
+        } catch (error) {
+            console.error('Import error:', error);
+            showToast(`Erreur d'importation: ${error.message || 'Fichier invalide'}`, 'error');
+        } finally {
+            fileImport.value = null; // Reset file input
         }
-    } catch (error) {
-        console.error('Import error:', error);
-        showToast(`Erreur d'importation: ${error.message || 'Fichier invalide'}`, 'error');
-    } finally {
-        showLoading(false);
-        fileImport.value = null; // Reset file input
-    }
+    });
 }
 
 // Vérifie et affiche les informations de débogage sur les images importées
@@ -1390,7 +1389,7 @@ Vous pouvez essayer de diviser votre projet en plusieurs fichiers plus petits.`)
     aiMap = {};
         
         // Don't call loadData() as we already have the project data from the response
-        saveData(); // Save the new data to server
+    saveData(); // Save the new data to server
     renderBlocks();
     renderBlockTypeButtons();
     updateBlockCount();
@@ -1543,7 +1542,7 @@ function resetAll() {
         history = [];
         aiMap = {};
         spellcheckResult.innerHTML = '<p>Aucun rapport.</p>';
-        saveData();
+        saveData({ showSpinner: true });
         renderBlocks();
         updateBlockCount();
         document.getElementById('btn-undo').disabled = true;
@@ -1623,37 +1622,36 @@ async function exportDocx() {
         return;
     }
     
-    showLoading(true);
-    try {
-        const response = await fetch('/api/export-docx', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blocks })
-        });
-        
-        if (response.ok) {
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
+    await heavyOperation(async () => {
+        try {
+            const response = await fetch('/api/export-docx', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blocks })
+            });
             
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'script_webtoon.docx';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'script_webtoon.docx';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                showToast('Export DOCX réussi', 'success');
+            } else {
+                const error = await response.json();
+                showToast(error.error || 'Erreur export DOCX', 'error');
+            }
             
-            showToast('Export DOCX réussi', 'success');
-        } else {
-            const error = await response.json();
-            showToast(error.error || 'Erreur export DOCX', 'error');
+        } catch (error) {
+            console.error('Failed to export DOCX:', error);
+            showToast('Erreur export DOCX', 'error');
         }
-        
-        showLoading(false);
-    } catch (error) {
-        console.error('Failed to export DOCX:', error);
-        showToast('Erreur export DOCX', 'error');
-        showLoading(false);
-    }
+    });
 }
 
 // Spellcheck function - nouvelle version interactive
@@ -1663,43 +1661,42 @@ async function spellCheck() {
         return;
     }
     
-    showLoading(true);
-    try {
-        const response = await fetch('/api/spellcheck', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ blocks })
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
+    await heavyOperation(async () => {
+        try {
+            const response = await fetch('/api/spellcheck', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ blocks })
+            });
             
-            if (data.errors && data.errors.length > 0) {
-                // Initialiser les variables pour la correction interactive
-                spellErrors = data.errors;
-                currentSpellIndex = 0;
-                spellHistory = [];
+            if (response.ok) {
+                const data = await response.json();
                 
-                // Afficher le modal de correction
-                showSpellcheckModal();
+                if (data.errors && data.errors.length > 0) {
+                    // Initialiser les variables pour la correction interactive
+                    spellErrors = data.errors;
+                    currentSpellIndex = 0;
+                    spellHistory = [];
+                    
+                    // Afficher le modal de correction
+                    showSpellcheckModal();
+                } else {
+                    // Aucune erreur trouvée
+                    spellcheckResult.innerHTML = `<pre>${data.report}</pre>`;
+                    toggleToolsSidebar(true);
+                    showToast('Aucune erreur trouvée', 'success');
+                }
             } else {
-                // Aucune erreur trouvée
-                spellcheckResult.innerHTML = `<pre>${data.report}</pre>`;
-                toggleToolsSidebar(true);
-                showToast('Aucune erreur trouvée', 'success');
+                spellcheckResult.innerHTML = '<p class="error">Erreur de connexion</p>';
+                showToast('Erreur de connexion', 'error');
             }
-        } else {
+            
+        } catch (error) {
+            console.error('Failed to spellcheck:', error);
             spellcheckResult.innerHTML = '<p class="error">Erreur de connexion</p>';
             showToast('Erreur de connexion', 'error');
         }
-        
-        showLoading(false);
-    } catch (error) {
-        console.error('Failed to spellcheck:', error);
-        spellcheckResult.innerHTML = '<p class="error">Erreur de connexion</p>';
-        showToast('Erreur de connexion', 'error');
-        showLoading(false);
-    }
+    });
 }
 
 // Afficher le modal de correction orthographique
@@ -2310,7 +2307,7 @@ function setTheme(newTheme) {
         themeBtn.innerHTML = '<i class="fas fa-moon"></i>';
     } else if (newTheme === 'dark') {
         themeBtn.innerHTML = '<i class="fas fa-sun"></i>';
-    } else if (newTheme === 'obsidian') {
+    } else if (theme === 'obsidian') {
         themeBtn.innerHTML = '<i class="fas fa-star"></i>';
     }
 }
@@ -2504,67 +2501,68 @@ async function extractWebtoon() {
     // Update the input field with the cleaned URL
     webtoonUrlInput.value = url;
     
-    // Show loading state
-    btnExtractWebtoon.disabled = true;
-    btnExtractFirecrawl.disabled = true;
-    extractionStatus.textContent = 'Extraction en cours...';
-    extractionStatus.className = 'status-message';
-    extractionProgress.classList.add('active');
-    extractionProgress.querySelector('.progress-bar').style.width = '10%';
-    extractedImagesContainer.innerHTML = '';
-    
-    try {
-        // Call the API to extract images
-        const response = await fetch('/api/extract-webtoon', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url })
-        });
-        
-        // Update progress
-        extractionProgress.querySelector('.progress-bar').style.width = '50%';
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erreur lors de l\'extraction');
-        }
-        
-        const data = await response.json();
-        
-        // Update progress
-        extractionProgress.querySelector('.progress-bar').style.width = '80%';
-        
-        if (data.images && data.images.length > 0) {
-            // Display extracted images
-            displayExtractedImages(data.images);
+    await heavyOperation(async () => {
+        try {
+            // Show loading state
+            btnExtractWebtoon.disabled = true;
+            btnExtractFirecrawl.disabled = true;
+            extractionStatus.textContent = 'Extraction en cours...';
+            extractionStatus.className = 'status-message';
+            extractionProgress.classList.add('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '10%';
+            extractedImagesContainer.innerHTML = '';
             
-            extractionStatus.textContent = `${data.images.length} images extraites avec succès`;
-            extractionStatus.className = 'status-message success';
+            // Call the API to extract images
+            const response = await fetch('/api/extract-webtoon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url })
+            });
             
-            // Open project sidebar if it's not already open
-            if (projectSidebar.getAttribute('data-visible') === 'false') {
-                projectSidebar.setAttribute('data-visible', 'true');
+            // Update progress
+            extractionProgress.querySelector('.progress-bar').style.width = '50%';
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erreur lors de l\'extraction');
             }
-        } else {
-            extractionStatus.textContent = 'Aucune image trouvée';
+            
+            const data = await response.json();
+            
+            // Update progress
+            extractionProgress.querySelector('.progress-bar').style.width = '80%';
+            
+            if (data.images && data.images.length > 0) {
+                // Display extracted images
+                displayExtractedImages(data.images);
+                
+                extractionStatus.textContent = `${data.images.length} images extraites avec succès`;
+                extractionStatus.className = 'status-message success';
+                
+                // Open project sidebar if it's not already open
+                if (projectSidebar.getAttribute('data-visible') === 'false') {
+                    projectSidebar.setAttribute('data-visible', 'true');
+                }
+            } else {
+                extractionStatus.textContent = 'Aucune image trouvée';
+                extractionStatus.className = 'status-message error';
+            }
+        } catch (error) {
+            console.error('Extraction error:', error);
+            extractionStatus.textContent = `Erreur: ${error.message}`;
             extractionStatus.className = 'status-message error';
+        } finally {
+            // Complete progress bar
+            extractionProgress.querySelector('.progress-bar').style.width = '100%';
+            setTimeout(() => {
+                extractionProgress.classList.remove('active');
+                extractionProgress.querySelector('.progress-bar').style.width = '0';
+            }, 1000);
+            
+            btnExtractWebtoon.disabled = false;
+            btnExtractFirecrawl.disabled = false;
         }
-    } catch (error) {
-        console.error('Extraction error:', error);
-        extractionStatus.textContent = `Erreur: ${error.message}`;
-        extractionStatus.className = 'status-message error';
-    } finally {
-        // Complete progress bar
-        extractionProgress.querySelector('.progress-bar').style.width = '100%';
-        setTimeout(() => {
-            extractionProgress.classList.remove('active');
-            extractionProgress.querySelector('.progress-bar').style.width = '0';
-        }, 1000);
-        
-        btnExtractWebtoon.disabled = false;
-        btnExtractFirecrawl.disabled = false;
-        showLoading(false);
-    }
+    });
 }
 
 // Extract webtoon using Firecrawl
@@ -2588,72 +2586,72 @@ async function extractFirecrawl() {
     // Update the input field with the cleaned URL
     webtoonUrlInput.value = url;
     
-    // Show loading state
-    showToast('Extraction Firecrawl démarrée...', 'info');
-    showLoading(true);
-    btnExtractWebtoon.disabled = true;
-    btnExtractFirecrawl.disabled = true;
-    extractionStatus.textContent = 'Extraction Firecrawl en cours...';
-    extractionStatus.className = 'status-message';
-    extractionProgress.classList.add('active');
-    extractionProgress.querySelector('.progress-bar').style.width = '10%';
-    extractedImagesContainer.innerHTML = '';
-    
-    try {
-        // Call the API to extract images using Firecrawl
-        const response = await fetch('/api/extract-firecrawl', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                url, 
-                api_key: firecrawlKey || undefined  // Only send if provided
-            })
-        });
+    await heavyOperation(async () => {
+        try {
+            // Show loading state
+            showToast('Extraction Firecrawl démarrée...', 'info');
+            btnExtractWebtoon.disabled = true;
+            btnExtractFirecrawl.disabled = true;
+            extractionStatus.textContent = 'Extraction Firecrawl en cours...';
+            extractionStatus.className = 'status-message';
+            extractionProgress.classList.add('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '10%';
+            extractedImagesContainer.innerHTML = '';
         
-        // Update progress
-        extractionProgress.querySelector('.progress-bar').style.width = '50%';
-        
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erreur lors de l\'extraction avec Firecrawl');
-        }
-        
-        const data = await response.json();
-        
-        // Update progress
-        extractionProgress.querySelector('.progress-bar').style.width = '80%';
-        
-        if (data.images && data.images.length > 0) {
-            // Display extracted images
-            displayExtractedImages(data.images);
+            // Call the API to extract images using Firecrawl
+            const response = await fetch('/api/extract-firecrawl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    url, 
+                    api_key: firecrawlKey || undefined  // Only send if provided
+                })
+            });
             
-            extractionStatus.textContent = `${data.images.length} images extraites avec succès via Firecrawl`;
-            extractionStatus.className = 'status-message success';
+            // Update progress
+            extractionProgress.querySelector('.progress-bar').style.width = '50%';
             
-            // Open project sidebar if it's not already open
-            if (projectSidebar.getAttribute('data-visible') === 'false') {
-                projectSidebar.setAttribute('data-visible', 'true');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erreur lors de l\'extraction avec Firecrawl');
             }
-        } else {
-            extractionStatus.textContent = 'Aucune image trouvée via Firecrawl';
+            
+            const data = await response.json();
+            
+            // Update progress
+            extractionProgress.querySelector('.progress-bar').style.width = '80%';
+            
+            if (data.images && data.images.length > 0) {
+                // Display extracted images
+                displayExtractedImages(data.images);
+                
+                extractionStatus.textContent = `${data.images.length} images extraites avec succès via Firecrawl`;
+                extractionStatus.className = 'status-message success';
+                
+                // Open project sidebar if it's not already open
+                if (projectSidebar.getAttribute('data-visible') === 'false') {
+                    projectSidebar.setAttribute('data-visible', 'true');
+                }
+            } else {
+                extractionStatus.textContent = 'Aucune image trouvée via Firecrawl';
+                extractionStatus.className = 'status-message error';
+            }
+        } catch (error) {
+            console.error('Firecrawl extraction error:', error);
+            extractionStatus.textContent = `Erreur Firecrawl: ${error.message}`;
             extractionStatus.className = 'status-message error';
+        } finally {
+            // Complete progress bar
+            extractionProgress.querySelector('.progress-bar').style.width = '100%';
+            setTimeout(() => {
+                extractionProgress.classList.remove('active');
+                extractionProgress.querySelector('.progress-bar').style.width = '0';
+            }, 1000);
+            
+            btnExtractWebtoon.disabled = false;
+            btnExtractFirecrawl.disabled = false;
         }
-    } catch (error) {
-        console.error('Firecrawl extraction error:', error);
-        extractionStatus.textContent = `Erreur Firecrawl: ${error.message}`;
-        extractionStatus.className = 'status-message error';
-    } finally {
-        // Complete progress bar
-        extractionProgress.querySelector('.progress-bar').style.width = '100%';
-        setTimeout(() => {
-            extractionProgress.classList.remove('active');
-            extractionProgress.querySelector('.progress-bar').style.width = '0';
-        }, 1000);
-        
-        btnExtractWebtoon.disabled = false;
-        btnExtractFirecrawl.disabled = false;
-        showLoading(false);
-    }
+    });
 }
 
 // Display extracted images
@@ -3009,55 +3007,55 @@ async function cleanupUploads() {
         return;
     }
     
-    // Show loading
-    showLoading(true);
-    extractionStatus.textContent = 'Nettoyage en cours...';
-    extractionStatus.className = 'status-message';
-    extractionProgress.classList.add('active');
-    extractionProgress.querySelector('.progress-bar').style.width = '50%';
-    
-    try {
-        // Call the cleanup API
-        const response = await fetch('/api/cleanup', {
-            method: 'POST'
-        });
+    await heavyOperation(async () => {
+        try {
+            // Show loading state
+            extractionStatus.textContent = 'Nettoyage en cours...';
+            extractionStatus.className = 'status-message';
+            extractionProgress.classList.add('active');
+            extractionProgress.querySelector('.progress-bar').style.width = '50%';
         
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Erreur lors du nettoyage');
+            // Call the cleanup API
+            const response = await fetch('/api/cleanup', {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erreur lors du nettoyage');
+            }
+            
+            const data = await response.json();
+            
+            // Update progress
+            extractionProgress.querySelector('.progress-bar').style.width = '100%';
+            
+            // Show success message
+            extractionStatus.textContent = data.message;
+            extractionStatus.className = 'status-message success';
+            
+            // Show detailed statistics in a toast
+            const stats = data.stats;
+            const detailedMessage = `
+                Avant: ${stats.before.directories} dossiers, ${stats.before.files} fichiers
+                Après: ${stats.after.directories} dossiers, ${stats.after.files} fichiers
+                Espace libéré: ${stats.deleted.directories} dossiers, ${stats.deleted.files} fichiers
+            `;
+            
+            showToast(detailedMessage, 'success');
+        } catch (error) {
+            console.error('Cleanup error:', error);
+            extractionStatus.textContent = `Erreur: ${error.message}`;
+            extractionStatus.className = 'status-message error';
+            showToast('Erreur lors du nettoyage des uploads', 'error');
+        } finally {
+            // Hide progress bar after a delay
+            setTimeout(() => {
+                extractionProgress.classList.remove('active');
+                extractionProgress.querySelector('.progress-bar').style.width = '0';
+            }, 1000);
         }
-        
-        const data = await response.json();
-        
-        // Update progress
-        extractionProgress.querySelector('.progress-bar').style.width = '100%';
-        
-        // Show success message
-        extractionStatus.textContent = data.message;
-        extractionStatus.className = 'status-message success';
-        
-        // Show detailed statistics in a toast
-        const stats = data.stats;
-        const detailedMessage = `
-            Avant: ${stats.before.directories} dossiers, ${stats.before.files} fichiers
-            Après: ${stats.after.directories} dossiers, ${stats.after.files} fichiers
-            Espace libéré: ${stats.deleted.directories} dossiers, ${stats.deleted.files} fichiers
-        `;
-        
-        showToast(detailedMessage, 'success');
-    } catch (error) {
-        console.error('Cleanup error:', error);
-        extractionStatus.textContent = `Erreur: ${error.message}`;
-        extractionStatus.className = 'status-message error';
-        showToast('Erreur lors du nettoyage des uploads', 'error');
-    } finally {
-        // Hide progress bar after a delay
-        setTimeout(() => {
-            extractionProgress.classList.remove('active');
-            extractionProgress.querySelector('.progress-bar').style.width = '0';
-            showLoading(false);
-        }, 1000);
-    }
+    });
 }
 
 // Télécharger un exemple de JSON valide
@@ -3425,4 +3423,4 @@ function displayTranslationSuggestionsInBlock(data) {
 }
 
 // Initialize app when DOM is loaded
-document.addEventListener('DOMContentLoaded', init); 
+document.addEventListener('DOMContentLoaded', init);

@@ -467,18 +467,20 @@ textarea {
     z-index: 2000;
     opacity: 0;
     transition: opacity 0.3s ease;
+    pointer-events: none; /* Allow interaction when hidden */
 }
 
 .loader.show {
     opacity: 1;
+    pointer-events: all; /* Block interaction when shown */
 }
 
 .spinner {
     width: 50px;
     height: 50px;
     border: 4px solid rgba(255, 255, 255, 0.3);
-    border-radius: 50%;
     border-top-color: var(--primary);
+    border-radius: 50%;
     animation: spin 1s infinite ease-in-out;
 }
 
@@ -729,14 +731,14 @@ footer {
     padding: 15px;
     margin-bottom: 15px;
     box-shadow: var(--shadow);
-    animation: fade-in 0.3s ease forwards;
-    opacity: 0;
     position: relative;
 }
 
-@keyframes fade-in {
-    to { opacity: 1; }
-}
+/*
+ * L'ancienne animation .block a été supprimée.
+ * Elle est maintenant gérée par .new-block-fade-in
+ * pour ne s'appliquer qu'aux nouveaux blocs.
+*/
 
 .block strong {
     display: inline-block;
@@ -924,6 +926,24 @@ hr {
     border: none;
     border-top: 1px solid var(--border);
     margin: 18px 0;
+}
+
+/* Animations
+-------------------------------------------------- */
+/* Animation pour l'ajout fluide d'un nouveau bloc */
+.new-block-fade-in {
+    animation: newBlockFadeInAnimation 0.35s ease-out forwards;
+}
+
+@keyframes newBlockFadeInAnimation {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* Responsive */
@@ -1574,54 +1594,47 @@ hr {
 }
 
 .suggestion-item {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: var(--space-3);
-    margin-bottom: var(--space-2);
-    cursor: pointer;
-    transition: var(--transition);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: var(--space-3);
+    padding: 10px 12px;
+    background: var(--btn-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: var(--transition);
 }
 
 .suggestion-item:hover {
     background: var(--primary-light);
     border-color: var(--primary);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
 }
 
-.suggestion-item:last-child {
-    margin-bottom: 0;
-}
-
-.suggestion-item span {
-    flex: 1;
-    font-size: var(--font-size-sm);
-    line-height: 1.5;
-    color: var(--text);
-}
-
-.suggestion-item button {
+.suggestion-item.selected {
     background: var(--primary);
     color: white;
-    border: none;
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-    cursor: pointer;
-    transition: var(--transition);
-    flex-shrink: 0;
-    min-width: 80px;
+    border-color: var(--primary);
 }
 
-.suggestion-item button:hover {
-    background: var(--primary-dark);
-    transform: translateY(-1px);
+.suggestion-text {
+    font-weight: 500;
+}
+
+.suggestion-apply-btn {
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    opacity: 0;
+    transition: var(--transition);
+}
+
+.suggestion-item:hover .suggestion-apply-btn {
+    opacity: 1;
+}
+
+.suggestion-item.selected .suggestion-apply-btn {
+    opacity: 1;
+    background: white;
+    color: var(--primary);
 }
 
 /* Zone selection styles */
@@ -2000,15 +2013,6 @@ hr {
     }
 }
 
-@keyframes fade-in {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
-}
-
 /* ===== MODAL ACTIONS UNIFIÉES ===== */
 .modal-actions {
     display: flex;
@@ -2171,4 +2175,4 @@ hr {
         width: 100%;
         margin: 0;
     }
-} 
+}
