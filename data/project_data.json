@@ -1,5 +1,18 @@
 {
-  "blocks": [],
+  "blocks": [
+    {
+      "type": "C",
+      "number": 1,
+      "content": "ca dit quoi adolf",
+      "comment": ""
+    },
+    {
+      "type": "DB",
+      "number": 1,
+      "content": "",
+      "comment": ""
+    }
+  ],
   "blockTypes": [
     "HB",
     "B",
@@ -8,7 +21,7 @@
     "HC"
   ],
   "api_keys": {
-    "gemini": "",
+    "gemini": "AIzaSyD3cpynpKcO9b-WZ4iO3MpBIQhUkrxa72M",
     "firecrawl": ""
   },
   "glossary": []
